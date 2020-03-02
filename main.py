@@ -13,7 +13,8 @@ def test():
     fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
     pipeline = asr.load('deepspeech2', lang='en')
     sentences = pipeline.predict([audio])
-    print(sentences)
+    for x in sentences:
+        print('\n' + x)
 
 # batch_audio = [audio]
 # m = pipeline._model
