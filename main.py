@@ -8,21 +8,22 @@ import tensorflow as tf
 tfkl = tf.keras.layers
 
 
-fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
-fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
-pipeline = asr.load('deepspeech2', lang='en')
-sentences = pipeline.predict([audio])
-print(sentences)
+def test():
+    fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
+    fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
+    pipeline = asr.load('deepspeech2', lang='en')
+    sentences = pipeline.predict([audio])
+    print(sentences)
 
-batch_audio = [audio]
-m = pipeline._model
-
-# Parameters for batch normalization.
-_BATCH_NORM_EPSILON = 1e-5
-_BATCH_NORM_DECAY = 0.997
-
-# Filters of convolution layer
-_CONV_FILTERS = 32
+# batch_audio = [audio]
+# m = pipeline._model
+#
+# # Parameters for batch normalization.
+# _BATCH_NORM_EPSILON = 1e-5
+# _BATCH_NORM_DECAY = 0.997
+#
+# # Filters of convolution layer
+# _CONV_FILTERS = 32
 
 
 def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
@@ -74,14 +75,33 @@ def our_model(pretrained_pipeline, sample_shape):
     # denoiser = unet(input_size=(256, 256, 1))
 
     inputs = tfkl.Input(shape=sample_shape)
-    denoised_audio = denoiser(inputs)
+    denoised_audio = simple_denoiser(inputs)
     features = pretrained_pipeline._features_extractor(denoised_audio)
 
     simple_denoiser()
     batch_logits = pretrained_pipeline._model.predict(features)
-    decoded_labels = pretrained_pipeline._decoder(batch_logits)
-    predictions = pretrained_pipeline._alphabet.get_batch_transcripts(decoded_labels)
 
-    model =
+    model = tf.keras.Model(inputs=inputs, outputs=batch_logits)
 
-from IPython import embed; embed()  ### DEBUG
+    return model
+
+
+def decode(asr_pipeline, batch_logits):
+    decoded_labels = asr_pipeline._decoder(batch_logits)
+    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
+    return predictions
+
+
+def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
+
+    dataset = asr_pipeline.wrap_preprocess(dataset)
+    dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
+    if not our_model.optimizer:  # a loss function and an optimizer
+        y = tfkl.Input(name='y', shape=[None], dtype='int32')
+        loss = asr_pipeline.get_loss()
+        our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
+    return our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+
+
+if __name__ == '__main__':
+    test()
