@@ -1,0 +1,5 @@
+HK comments on canvas project proposal (in gradebook):
+	You could include the depiction you used in the presentation here and your final report as well, as it was useful.
+	What dataset will you use in the experiments? How large is it? etc.
+	I'd consider RNNs, as audio has temporal nature.
+	Please start thinking about the baseline approach, evaluation measure, and a review of previous work on this topic.
