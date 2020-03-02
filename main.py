@@ -1,4 +1,5 @@
-from unet import get_unet
+# from unet import get_unet
+# from rnn_generator import get_generator
 
 import automatic_speech_recognition as asr
 from scipy.io import wavfile
@@ -16,16 +17,6 @@ def test():
     for x in sentences:
         print('\n' + x)
 
-# batch_audio = [audio]
-# m = pipeline._model
-#
-# # Parameters for batch normalization.
-# _BATCH_NORM_EPSILON = 1e-5
-# _BATCH_NORM_DECAY = 0.997
-#
-# # Filters of convolution layer
-# _CONV_FILTERS = 32
-
 
 def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     """ Get ready features, and make a prediction. """
@@ -36,34 +27,6 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     return predictions
 
 
-# def get_generator(input_static_dim=59,
-#                   input_dynamic_dim=118,
-#                   num_hidden=5,
-#                   hidden_dim=512,
-#                   dropout_rate=0.5):
-#     """Credit: from MIT Licensed
-#         https://github.com/tkm2261/dnn-voice-changer
-#     """
-#
-#     inputs_all = x = tfkl.Input(shape=(input_static_dim + input_dynamic_dim,))
-#     x_static = tfkl.Lambda(lambda x: x[:, :input_static_dim])(inputs_all)
-#
-#     t_x = tfkl.Dense(input_static_dim, activation='sigmoid')(x_static)
-#
-#     for _ in range(num_hidden):
-#         act = tfkl.LeakyReLU()
-#         x = tfkl.Dense(hidden_dim, activation=act)(x)
-#         x = tfkl.Dropout(dropout_rate)(x)
-#
-#     g_x = tfkl.Dense(input_static_dim)(x)
-#
-#     outputs = tfkl.add([x_static, tfkl.multiply([t_x, g_x])])
-#
-#     model = tf.keras.Model(inputs=inputs_all, outputs=outputs, name='generator')
-#
-#     return model
-
-
 def simple_denoiser(x):
     x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
     x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
@@ -72,15 +35,15 @@ def simple_denoiser(x):
 
 
 def our_model(pretrained_pipeline, sample_shape):
-    # denoiser = get_generator()
-    # denoiser = unet(input_size=(256, 256, 1))
 
     inputs = tfkl.Input(shape=sample_shape)
-    denoised_audio = simple_denoiser(inputs)
-    features = pretrained_pipeline._features_extractor(denoised_audio)
+    features = pretrained_pipeline._features_extractor(inputs)
 
-    simple_denoiser()
-    batch_logits = pretrained_pipeline._model.predict(features)
+    denoised_features = simple_denoiser(features)
+    # denoised_features = get_generator()(features)
+    # denoised_features = unet(input_size=(256, 256, 1))(features)
+
+    batch_logits = pretrained_pipeline._model(denoised_features)
 
     model = tf.keras.Model(inputs=inputs, outputs=batch_logits)
 
@@ -106,3 +69,9 @@ def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
 
 if __name__ == '__main__':
     test()
+
+    # load dataset
+    # dataset, dev_dataset, shape_of_single_wav = ...
+
+    # pretrained_pipeline = asr.load('deepspeech2', lang='en')
+    # m = our_model(pretrained_pipeline, shape_of_single_wav)
