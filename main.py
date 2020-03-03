@@ -1,5 +1,6 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
+from loader import loader
 
 import automatic_speech_recognition as asr
 from scipy.io import wavfile
@@ -28,7 +29,7 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
 
 
 def simple_denoiser(x):
-    x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
+    x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal', name='den0')(x)
     x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
     x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
     return x
@@ -37,9 +38,9 @@ def simple_denoiser(x):
 def our_model(pretrained_pipeline, sample_shape):
 
     inputs = tfkl.Input(shape=sample_shape)
-    features = pretrained_pipeline._features_extractor(inputs)
+    # features = pretrained_pipeline._features_extractor(inputs)
 
-    denoised_features = simple_denoiser(features)
+    denoised_features = tf.squeeze(simple_denoiser(inputs), -1)
     # denoised_features = get_generator()(features)
     # denoised_features = unet(input_size=(256, 256, 1))(features)
 
@@ -64,7 +65,9 @@ def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
         y = tfkl.Input(name='y', shape=[None], dtype='int32')
         loss = asr_pipeline.get_loss()
         our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
-    return our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+    tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+    print(tmp)
+    return our_model
 
 
 if __name__ == '__main__':
@@ -72,6 +75,43 @@ if __name__ == '__main__':
 
     # load dataset
     # dataset, dev_dataset, shape_of_single_wav = ...
+    clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
 
-    # pretrained_pipeline = asr.load('deepspeech2', lang='en')
-    # m = our_model(pretrained_pipeline, shape_of_single_wav)
+    ### MUST SHUFFLE AND SPLIT!
+    def pad(x, l=159744):
+        if len(x) == l:
+            return x
+        return np.hstack((x, np.zeros(l - len(x))))
+
+
+    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+
+    # normalize
+    clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
+
+    pretrained_pipeline = asr.load('deepspeech2', lang='en')
+
+    enc = pretrained_pipeline._alphabet._str_to_label
+    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts_padded = np.array([pad(x, 91) for x in encoded_transcripts])
+
+
+    features = pretrained_pipeline._features_extractor(clean_wavs_padded)
+
+    train_data = (np.expand_dims(features, -1), encoded_transcripts_padded)
+    val_data = train_data
+
+    # working example
+    # we could use https://www.tensorflow.org/tutorials/customization/autodiff
+    batch_size = 10
+    den = simple_denoiser(features[:batch_size, :, :, None])
+    y = pretrained_pipeline._model(den)
+
+    predictions = pretrained_pipeline.decoder(y)
+    decoded_predictions = \
+        [[pretrained_pipeline._alphabet._label_to_str[char] for char in l] for l in predictions]
+    print(decoded_predictions)
+
+    # FIX THIS CODE BELOW
+    # m = our_model(pretrained_pipeline, train_data[0].shape[1:])
+    # fit(m, pretrained_pipeline, train_data, val_data)
