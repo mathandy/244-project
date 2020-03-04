@@ -10,6 +10,55 @@ import tensorflow as tf
 tfkl = tf.keras.layers
 
 
+_DEFAULT_CONV_PARAMS = {
+    'activation': 'relu',
+    'padding': 'same',
+    'kernel_initializer': 'he_normal'
+}
+
+
+def simple_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
+    x = tfkl.Conv2D(64, 3, name='den_conv0', **conv_params)(x)
+    x = tfkl.Conv2D(64, 3, name='den_conv1', **conv_params)(x)
+    x = tfkl.Conv2D(64, 3, name='den_conv2', **conv_params)(x)
+    return x
+
+
+# def our_model(pretrained_pipeline, sample_shape):
+#
+#     inputs = tfkl.Input(shape=sample_shape)
+#     # features = pretrained_pipeline._features_extractor(inputs)
+#
+#     denoised_features = tf.squeeze(simple_denoiser(inputs), -1)
+#     # denoised_features = get_generator()(features)
+#     # denoised_features = unet(input_size=(256, 256, 1))(features)
+#
+#     batch_logits = pretrained_pipeline._model(denoised_features)
+#
+#     model = tf.keras.Model(inputs=inputs, outputs=batch_logits)
+#
+#     return model
+
+
+# def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
+#
+#     dataset = asr_pipeline.wrap_preprocess(dataset)
+#     dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
+#     if not our_model.optimizer:  # a loss function and an optimizer
+#         y = tfkl.Input(name='y', shape=[None], dtype='int32')
+#         loss = asr_pipeline.get_loss()
+#         our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
+#     tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+#     print(tmp)
+#     return our_model
+
+
+def decode(asr_pipeline, batch_logits):
+    decoded_labels = asr_pipeline._decoder(batch_logits)
+    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
+    return predictions
+
+
 def test():
     fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
     fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
@@ -26,48 +75,6 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     decoded_labels = self._decoder(batch_logits)
     predictions = self._alphabet.get_batch_transcripts(decoded_labels)
     return predictions
-
-
-def simple_denoiser(x):
-    x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal', name='den0')(x)
-    x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
-    x = tfkl.Conv2D(64, 3, activation='relu', padding='same', kernel_initializer='he_normal')(x)
-    return x
-
-
-def our_model(pretrained_pipeline, sample_shape):
-
-    inputs = tfkl.Input(shape=sample_shape)
-    # features = pretrained_pipeline._features_extractor(inputs)
-
-    denoised_features = tf.squeeze(simple_denoiser(inputs), -1)
-    # denoised_features = get_generator()(features)
-    # denoised_features = unet(input_size=(256, 256, 1))(features)
-
-    batch_logits = pretrained_pipeline._model(denoised_features)
-
-    model = tf.keras.Model(inputs=inputs, outputs=batch_logits)
-
-    return model
-
-
-def decode(asr_pipeline, batch_logits):
-    decoded_labels = asr_pipeline._decoder(batch_logits)
-    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
-    return predictions
-
-
-def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
-
-    dataset = asr_pipeline.wrap_preprocess(dataset)
-    dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
-    if not our_model.optimizer:  # a loss function and an optimizer
-        y = tfkl.Input(name='y', shape=[None], dtype='int32')
-        loss = asr_pipeline.get_loss()
-        our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
-    tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
-    print(tmp)
-    return our_model
 
 
 if __name__ == '__main__':
@@ -95,21 +102,23 @@ if __name__ == '__main__':
     encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
     encoded_transcripts_padded = np.array([pad(x, 91) for x in encoded_transcripts])
 
-
     features = pretrained_pipeline._features_extractor(clean_wavs_padded)
 
     train_data = (np.expand_dims(features, -1), encoded_transcripts_padded)
     val_data = train_data
 
-    # working example
+    # working full pipeline inference example
     # we could use https://www.tensorflow.org/tutorials/customization/autodiff
     batch_size = 10
-    den = simple_denoiser(features[:batch_size, :, :, None])
+    # den = simple_denoiser(features[:batch_size, :, :, None])
+    feature_batch = np.expand_dims(features[:batch_size], -1)
+    den = simple_denoiser(feature_batch)
     y = pretrained_pipeline._model(den)
 
     predictions = pretrained_pipeline.decoder(y)
     decoded_predictions = \
-        [[pretrained_pipeline._alphabet._label_to_str[char] for char in l] for l in predictions]
+        [[pretrained_pipeline._alphabet._label_to_str[char] for char in l]
+         for l in predictions]
     print(decoded_predictions)
 
     # FIX THIS CODE BELOW
