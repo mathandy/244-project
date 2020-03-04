@@ -20,8 +20,8 @@ _DEFAULT_CONV_PARAMS = {
 def simple_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
     x = tfkl.Conv2D(64, 3, name='den_conv0', **conv_params)(x)
     x = tfkl.Conv2D(64, 3, name='den_conv1', **conv_params)(x)
-    x = tfkl.Conv2D(64, 3, name='den_conv2', **conv_params)(x)
-    return x
+    x = tfkl.Conv2D(1, 3, name='den_conv2', **conv_params)(x)
+    return tf.squeeze(x, 3)
 
 
 # def our_model(pretrained_pipeline, sample_shape):
