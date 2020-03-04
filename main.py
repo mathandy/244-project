@@ -99,8 +99,10 @@ if __name__ == '__main__':
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
 
     enc = pretrained_pipeline._alphabet._str_to_label
-    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
-    encoded_transcripts_padded = np.array([pad(x, 91) for x in encoded_transcripts])
+    encoded_transcripts = \
+        [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts_padded = \
+        np.array([pad(x, 91) for x in encoded_transcripts])
 
     features = pretrained_pipeline._features_extractor(clean_wavs_padded)
 
