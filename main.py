@@ -61,7 +61,6 @@ def decode(asr_pipeline, batch_logits):
 
 def test():
     fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
-    # fn = 'data/clean/common_voice_en_17893917.wav'
     fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
     pipeline = asr.load('deepspeech2', lang='en')
     sentences = pipeline.predict([audio])
