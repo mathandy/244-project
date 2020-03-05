@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
     # working full pipeline inference example
     # we could use https://www.tensorflow.org/tutorials/customization/autodiff
-    batch_size = 2
+    batch_size = 5
 
     model = tf.keras.Sequential([
         tfkl.Conv2D(64, 3, name='den_conv0', padding='SAME'),
@@ -144,14 +144,20 @@ if __name__ == '__main__':
         tfkl.Conv2D(1, 3, name='den_conv2', padding='SAME')
     ])
     # den = simple_denoiser(features_noisy[:batch_size, :, :, None])
-
-    optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-    loss_value, grads = grad(model, features_noisy[:batch_size], features_clean[:batch_size])
+    train_feature_noisy = features_noisy[:batch_size]
+    train_feature_clean = features_clean[:batch_size]
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.0000001)
+    loss_value, grads = grad(model, train_feature_noisy, train_feature_clean)
 
     print("Step: {}, Initial Loss: {}".format(optimizer.iterations.numpy(), loss_value.numpy()))
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     print("Step: {},          Loss: {}".format(optimizer.iterations.numpy(),
-                                               loss(model, features_noisy, features_clean, training=True).numpy()))
+                                               loss(model, train_feature_noisy, train_feature_clean, training=True).numpy()))
+
+    predictions = model(train_feature_noisy)
+    tf.nn.softmax(predictions)
+
+
 
     # feature_batch = np.expand_dims(features[:batch_size], -1)
     # ## previous denoiser
