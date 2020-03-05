@@ -10,7 +10,7 @@ tfkl = tf.keras.layers
 
 
 def test():
-    fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
+    fn = 'data/noisy/common_voice_en_1384.wav'  # sample rate 16 kHz, and 16 bit depth
     fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
     pipeline = asr.load('deepspeech2', lang='en')
     sentences = pipeline.predict([audio])
