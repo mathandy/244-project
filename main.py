@@ -61,6 +61,7 @@ def decode(asr_pipeline, batch_logits):
 
 def test():
     fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
+    # fn = 'data/clean/common_voice_en_17893917.wav'
     fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
     pipeline = asr.load('deepspeech2', lang='en')
     sentences = pipeline.predict([audio])
@@ -78,7 +79,7 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
 
 
 if __name__ == '__main__':
-    test()
+    # test()
 
     # load dataset
     # dataset, dev_dataset, shape_of_single_wav = ...
@@ -91,10 +92,18 @@ if __name__ == '__main__':
         return np.hstack((x, np.zeros(l - len(x))))
 
 
-    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    # clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
 
+    ### Seems do not need to pad the wav files
+    clean_wavs_padded = clean_wavs
     # normalize
-    clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
+    max_ = 0
+    for i in range(len(clean_wavs_padded)):
+        temp_max = clean_wavs_padded[i].max()
+        if max_ < temp_max:
+            max_ = temp_max
+    clean_wavs_padded = [ x / max_ for x in clean_wavs_padded]
+    # clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
 
