@@ -17,85 +17,8 @@ _DEFAULT_CONV_PARAMS = {
 }
 
 EPOCHS = 3
-
-
-def feature_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
-    x = tfkl.Conv2D(64, 3, name='den_conv0', **conv_params)(x)
-    x = tfkl.Conv2D(64, 3, name='den_conv1', **conv_params)(x)
-    x = tfkl.Conv2D(1, 3, name='den_conv2', **conv_params)(x)
-    return tf.squeeze(x, 3)
-
-
-class FlatDenoiser(tf.keras.Model):
-    def __init__(self, *args, conv_params=_DEFAULT_CONV_PARAMS, **kwargs):
-        super(FlatDenoiser, self).__init__(*args, **kwargs)
-        self.conv_params = conv_params
-        self.built_layers = None
-
-    def build(self, input_shape):
-        self.built_layers = [
-            tfkl.Conv1D(8, 3, name='den_conv0', **self.conv_params),
-            tfkl.Conv1D(8, 3, name='den_conv1', **self.conv_params),
-            tfkl.Conv1D(8, 3, name='den_conv2', **self.conv_params),
-            tfkl.Flatten(),
-            tfkl.Dense(input_shape[-1])
-        ]
-
-    def call(self, inputs, training=True):
-        a = tf.expand_dims(inputs, -1)
-        for layer in self.built_layers:
-            a = layer(a)
-        return a
-
-
-def decode(asr_pipeline, batch_logits):
-    decoded_labels = asr_pipeline._decoder(batch_logits)
-    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
-    return predictions
-
-
-def test():
-    fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
-    fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
-    pipeline = asr.load('deepspeech2', lang='en')
-    sentences = pipeline.predict([audio])
-    for x in sentences:
-        print('\n' + x)
-
-
-def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
-    """ Get ready features, and make a prediction. """
-    features: np.ndarray = self._features_extractor(batch_audio)
-    batch_logits = self._model.predict(features, **kwargs)
-    decoded_labels = self._decoder(batch_logits)
-    predictions = self._alphabet.get_batch_transcripts(decoded_labels)
-    return predictions
-
-
-def loss(model, x, y, training):
-    # training=training is needed only if there are layers with different
-    # behavior during training versus inference (e.g. Dropout).
-    y_ = model(x, training=training)
-    loss_object = tf.keras.losses.MSE
-    return tf.reduce_sum(loss_object(y_true=y, y_pred=y_))
-
-
-def grad(model, inputs, targets):
-    with tf.GradientTape() as tape:
-        loss_value = loss(model, inputs, targets, training=True)
-    return loss_value, tape.gradient(loss_value, model.trainable_variables)
-
-
-def align(arrays: list, default=0) -> np.ndarray:
-    """ Pad arrays (default along time dimensions). Return the single
-    array (batch_size, time, features). """
-    max_array = max(arrays, key=len)
-    X = np.full(shape=[len(arrays), *max_array.shape],
-                fill_value=default, dtype=float)
-    for index, array in enumerate(arrays):
-        time_dim, features_dim = array.shape
-        X[index, :time_dim] = array
-    return X
+BATCH_SIZE = 32
+LEARNING_RATE = 0.0001
 
 
 def pad(x, l=159744):
@@ -113,6 +36,10 @@ def load_data():
     clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
+    noisy_wavs_padded = \
+        np.array([pad(x) for x in noisy_wavs]).astype('float32')
+    noisy_wavs_padded = noisy_wavs_padded / noisy_wavs_padded.max()
+
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
     enc = asr.text.Alphabet(lang='en')._str_to_label
 
@@ -121,7 +48,7 @@ def load_data():
     encoded_transcripts_padded = \
         np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
 
-    return clean_wavs_padded, encoded_transcripts_padded
+    return clean_wavs_padded, noisy_wavs_padded, encoded_transcripts_padded
 
 
 def get_flat_denoiser():
@@ -137,6 +64,20 @@ def get_flat_denoiser():
     return model
 
 
+def decode(asr_pipeline, batch_logits):
+    decoded_labels = asr_pipeline._decoder(batch_logits)
+    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
+    return predictions
+
+
+def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
+    """ Get ready features, and make a prediction. """
+    features: np.ndarray = self._features_extractor(batch_audio)
+    batch_logits = self._model.predict(features, **kwargs)
+    decoded_labels = self._decoder(batch_logits)
+    predictions = self._alphabet.get_batch_transcripts(decoded_labels)
+    return predictions
+
 
 def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
 
@@ -151,13 +92,26 @@ def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
     return our_model
 
 
+def get_loss_fcn():
+    def get_length(tensor):
+        lengths = tf.math.reduce_sum(tf.ones_like(tensor), 1)
+        return tf.cast(lengths, tf.int32)
+
+    def ctc_loss(labels, logits):
+        label_length = get_length(labels)
+        logit_length = get_length(tf.math.reduce_max(logits, 2))
+        return tf.nn.ctc_loss(labels, logits, label_length, logit_length,
+                              logits_time_major=False, blank_index=-1)
+    return ctc_loss
+
+
 if __name__ == '__main__':
 
     # load dataset
-    x, y = load_data()
+    x_clean, x_noisy, y = load_data()
 
     # create tensorflow dataset
-    x_ds = tf.data.Dataset.from_tensor_slices(x)
+    x_ds = tf.data.Dataset.from_tensor_slices(x_noisy)
     y_ds = tf.data.Dataset.from_tensor_slices(y)
     ds = tf.data.Dataset.zip((x_ds, y_ds))
     ds = ds.shuffle(buffer_size=1024).batch(32)
@@ -165,7 +119,9 @@ if __name__ == '__main__':
     # create denoiser model
     model = get_flat_denoiser()
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
-
+    loss_fcn = get_loss_fcn()
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
+    loss_metric = tf.keras.metrics.Mean()
 
     # train
     for epoch in range(EPOCHS):

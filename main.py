@@ -92,7 +92,7 @@ def grad(model, inputs, targets):
 
 
 if __name__ == '__main__':
-    # test()
+    # test_asr_pipeline()
 
     # load dataset
     # dataset, dev_dataset, shape_of_single_wav = ...
