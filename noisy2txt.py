@@ -129,6 +129,8 @@ if __name__ == '__main__':
         for step, (x_batch, y_batch) in enumerate(ds):
             with tf.GradientTape() as tape:
                 yhat_batch = model(x_batch)
+                features = pretrained_pipeline._features_extractor(x_batch)
+                batch_logits = pretrained_pipeline._model(features)
                 loss = loss_fcn(x_batch, yhat_batch)
 
             grads = tape.gradient(loss, model.trainable_weights)
