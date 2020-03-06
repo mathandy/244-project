@@ -17,8 +17,6 @@ _DEFAULT_CONV_PARAMS = {
 }
 
 EPOCHS = 3
-BATCH_SIZE = 32
-LEARNING_RATE = 0.0001
 
 
 def feature_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
@@ -139,6 +137,20 @@ def get_flat_denoiser():
     return model
 
 
+
+def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
+
+    dataset = asr_pipeline.wrap_preprocess(dataset)
+    dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
+    if not our_model.optimizer:  # a loss function and an optimizer
+        y = tfkl.Input(name='y', shape=[None], dtype='int32')
+        loss = asr_pipeline.get_loss()
+        our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
+    tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+    print(tmp)
+    return our_model
+
+
 if __name__ == '__main__':
 
     # load dataset
@@ -148,13 +160,12 @@ if __name__ == '__main__':
     x_ds = tf.data.Dataset.from_tensor_slices(x)
     y_ds = tf.data.Dataset.from_tensor_slices(y)
     ds = tf.data.Dataset.zip((x_ds, y_ds))
-    ds = ds.shuffle(buffer_size=1024).batch(BATCH_SIZE)
+    ds = ds.shuffle(buffer_size=1024).batch(32)
 
-    # create model
+    # create denoiser model
     model = get_flat_denoiser()
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
-    loss_metric = tf.keras.metrics.Mean()
-    loss_fcn = tf.keras.losses.MSE
+    pretrained_pipeline = asr.load('deepspeech2', lang='en')
+
 
     # train
     for epoch in range(EPOCHS):
