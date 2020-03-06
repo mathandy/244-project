@@ -37,6 +37,10 @@ def load_data():
         np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
+    noisy_wavs_padded = \
+        np.array([pad(x) for x in noisy_wavs]).astype('float32')
+    noisy_wavs_padded = noisy_wavs_padded / noisy_wavs_padded.max()
+
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
     enc = asr.text.Alphabet(lang='en')._str_to_label
 
@@ -46,7 +50,8 @@ def load_data():
     encoded_transcripts_padded = \
         np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
 
-    return clean_wavs_padded, encoded_transcripts_padded
+    # return clean_wavs_padded, encoded_transcripts_padded
+    return noisy_wavs_padded, clean_wavs_padded
 
 
 def get_flat_denoiser():
