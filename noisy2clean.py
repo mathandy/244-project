@@ -21,37 +21,6 @@ BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
 
 
-def feature_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
-    x = tfkl.Conv2D(64, 3, name='den_conv0', **conv_params)(x)
-    x = tfkl.Conv2D(64, 3, name='den_conv1', **conv_params)(x)
-    x = tfkl.Conv2D(1, 3, name='den_conv2', **conv_params)(x)
-    return tf.squeeze(x, 3)
-
-
-def decode(asr_pipeline, batch_logits):
-    decoded_labels = asr_pipeline._decoder(batch_logits)
-    predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
-    return predictions
-
-
-def test():
-    fn = 'test16.wav'  # sample rate 16 kHz, and 16 bit depth
-    fs, audio = wavfile.read(fn)  # same as `asr.utils.read_audio()`
-    pipeline = asr.load('deepspeech2', lang='en')
-    sentences = pipeline.predict([audio])
-    for x in sentences:
-        print('\n' + x)
-
-
-def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
-    """ Get ready features, and make a prediction. """
-    features: np.ndarray = self._features_extractor(batch_audio)
-    batch_logits = self._model.predict(features, **kwargs)
-    decoded_labels = self._decoder(batch_logits)
-    predictions = self._alphabet.get_batch_transcripts(decoded_labels)
-    return predictions
-
-
 def pad(x, l=159744):
     if len(x) == l:
         return x
