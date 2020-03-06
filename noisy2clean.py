@@ -28,28 +28,6 @@ def feature_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
     return tf.squeeze(x, 3)
 
 
-class FlatDenoiser(tf.keras.Model):
-    def __init__(self, *args, conv_params=_DEFAULT_CONV_PARAMS, **kwargs):
-        super(FlatDenoiser, self).__init__(*args, **kwargs)
-        self.conv_params = conv_params
-        self.built_layers = None
-
-    def build(self, input_shape):
-        self.built_layers = [
-            tfkl.Conv1D(8, 3, name='den_conv0', **self.conv_params),
-            tfkl.Conv1D(8, 3, name='den_conv1', **self.conv_params),
-            tfkl.Conv1D(8, 3, name='den_conv2', **self.conv_params),
-            tfkl.Flatten(),
-            tfkl.Dense(input_shape[-1])
-        ]
-
-    def call(self, inputs, training=True):
-        a = tf.expand_dims(inputs, -1)
-        for layer in self.built_layers:
-            a = layer(a)
-        return a
-
-
 def decode(asr_pipeline, batch_logits):
     decoded_labels = asr_pipeline._decoder(batch_logits)
     predictions = asr_pipeline._alphabet.get_batch_transcripts(decoded_labels)
@@ -74,32 +52,6 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     return predictions
 
 
-def loss(model, x, y, training):
-    # training=training is needed only if there are layers with different
-    # behavior during training versus inference (e.g. Dropout).
-    y_ = model(x, training=training)
-    loss_object = tf.keras.losses.MSE
-    return tf.reduce_sum(loss_object(y_true=y, y_pred=y_))
-
-
-def grad(model, inputs, targets):
-    with tf.GradientTape() as tape:
-        loss_value = loss(model, inputs, targets, training=True)
-    return loss_value, tape.gradient(loss_value, model.trainable_variables)
-
-
-def align(arrays: list, default=0) -> np.ndarray:
-    """ Pad arrays (default along time dimensions). Return the single
-    array (batch_size, time, features). """
-    max_array = max(arrays, key=len)
-    X = np.full(shape=[len(arrays), *max_array.shape],
-                fill_value=default, dtype=float)
-    for index, array in enumerate(arrays):
-        time_dim, features_dim = array.shape
-        X[index, :time_dim] = array
-    return X
-
-
 def pad(x, l=159744):
     if len(x) == l:
         return x
@@ -112,14 +64,16 @@ def load_data():
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
     # pad and normalize  ### MUST SHUFFLE AND SPLIT!
-    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    clean_wavs_padded = \
+        np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
     enc = asr.text.Alphabet(lang='en')._str_to_label
 
     # enc = pretrained_pipeline._alphabet._str_to_label
-    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts = \
+        [[enc[char] for char in label] for label in transcripts]
     encoded_transcripts_padded = \
         np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
 
