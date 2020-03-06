@@ -91,6 +91,13 @@ def grad(model, inputs, targets):
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
+def generate_batches(noisy_wavs, clean_wavs, transcripts):
+    clean_dataset = tf.data.Dataset.from_tensor_slices(clean_wavs)
+    noisy_dataset = tf.data.Dataset.from_tensor_slices(noisy_wavs)
+    transcripts_dataset = tf.data.Dataset.from_tensor_slices(transcripts)
+    return tf.data.Dataset.zip((noisy_dataset, clean_dataset, transcripts_dataset))
+
+
 if __name__ == '__main__':
     # test()
 
