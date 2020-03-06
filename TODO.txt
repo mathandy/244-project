@@ -1,1 +1,1 @@
-* per HK's suggestion, reserve a test set of noises that the de-noiser never sees
+* per HK's suggestion, reserve a test_asr_pipeline set of noises that the de-noiser never sees

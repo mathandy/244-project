@@ -99,7 +99,7 @@ def generate_batches(noisy_wavs, clean_wavs, transcripts):
 
 
 if __name__ == '__main__':
-    # test()
+    # test_asr_pipeline()
 
     # load dataset
     # dataset, dev_dataset, shape_of_single_wav = ...
