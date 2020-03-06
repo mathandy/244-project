@@ -82,7 +82,7 @@ def loss(model, x, y, training):
     # behavior during training versus inference (e.g. Dropout).
     y_ = model(x, training=training)
     loss_object = tf.keras.losses.MSE
-    return loss_object(y_true=y, y_pred=y_)
+    return tf.reduce_sum(loss_object(y_true=y, y_pred=y_))
 
 
 def grad(model, inputs, targets):
@@ -91,68 +91,70 @@ def grad(model, inputs, targets):
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
-if __name__ == '__main__':
-    # test()
+def align(arrays: list, default=0) -> np.ndarray:
+    """ Pad arrays (default along time dimensions). Return the single
+    array (batch_size, time, features). """
+    max_array = max(arrays, key=len)
+    X = np.full(shape=[len(arrays), *max_array.shape],
+                fill_value=default, dtype=float)
+    for index, array in enumerate(arrays):
+        time_dim, features_dim = array.shape
+        X[index, :time_dim] = array
+    return X
 
-    # load dataset
-    # dataset, dev_dataset, shape_of_single_wav = ...
+
+def pad(x, l=159744):
+    if len(x) == l:
+        return x
+    return np.hstack((x, np.zeros(l - len(x))))
+
+
+def load_data():
     clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
-    ### MUST SHUFFLE AND SPLIT!
-    def pad(x, l=159744):
-        if len(x) == l:
-            return x
-        return np.hstack((x, np.zeros(l - len(x))))
-
-
-    # clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
-
-    ### Seems do not need to pad the wav files
-    # normalize
-    # max_ = 0
-    # for i in range(len(clean_wavs)):
-    #     temp_max = clean_wavs[i].max()
-    #     if max_ < temp_max:
-    #         max_ = temp_max
-    # clean_wavs = [x / max_ for x in clean_wavs]
-    # clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
+    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
 
     enc = pretrained_pipeline._alphabet._str_to_label
-    encoded_transcripts = \
-        [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
     encoded_transcripts_padded = \
-        np.array([pad(x, 91) for x in encoded_transcripts])
+        np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
 
-    features_clean = pretrained_pipeline._features_extractor(clean_wavs)
-    features_noisy = pretrained_pipeline._features_extractor(noisy_wavs)
+    return clean_wavs_padded, encoded_transcripts_padded
 
-    train_data_clean = (np.expand_dims(features_clean, -1), encoded_transcripts_padded)
-    train_data_noisy = (np.expand_dims(features_noisy, -1), encoded_transcripts_padded)
 
-    features_clean = np.expand_dims(features_clean, -1)
-    features_noisy = np.expand_dims(features_noisy, -1)
+if __name__ == '__main__':
 
-    # working full pipeline inference example
-    # we could use https://www.tensorflow.org/tutorials/customization/autodiff
-    batch_size = 5
+    # load dataset
+    x, y = load_data()
 
+    # build model
     model = tf.keras.Sequential([
         tfkl.Conv2D(64, 3, name='den_conv0', padding='SAME'),
         tfkl.Conv2D(64, 3, name='den_conv1', padding='SAME'),
         tfkl.Conv2D(1, 3, name='den_conv2', padding='SAME')
     ])
-    # den = simple_denoiser(features_noisy[:batch_size, :, :, None])
-    train_feature_noisy = features_noisy[:batch_size]
-    train_feature_clean = features_clean[:batch_size]
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.0000001)
-    loss_value, grads = grad(model, train_feature_noisy, train_feature_clean)
 
-    print("Step: {}, Initial Loss: {}".format(optimizer.iterations.numpy(), loss_value.numpy()))
+    # pass through model
+    yhat = model(x)
+    ll = tf.keras.losses.MSE(y, yhat)
+    # ll2 = tf.reduce_sum(ll)
+    from IPython import embed; embed()  ### DEBUG
+    loss_value, grads = grad(model, x, y)
+
+    print("Step: {}, Initial Loss: {}"
+          "".format(optimizer.iterations.numpy(), loss_value.numpy()))
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    print("Step: {},          Loss: {}".format(optimizer.iterations.numpy(),
-                                               loss(model, train_feature_noisy, train_feature_clean, training=True).numpy()))
+    print("Step: {},          Loss: {}".format(
+        optimizer.iterations.numpy(),
+        loss(model, x, y, training=True).numpy())
+    )
 
     predictions = model(train_feature_noisy)
     tf.nn.softmax(predictions)
