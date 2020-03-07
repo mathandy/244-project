@@ -90,7 +90,7 @@ if __name__ == '__main__':
         for step, (x_batch, y_batch) in enumerate(ds):
             with tf.GradientTape() as tape:
                 yhat_batch = model(x_batch)
-                loss = loss_fcn(x_batch, yhat_batch)
+                loss = loss_fcn(y_batch, yhat_batch)
 
             grads = tape.gradient(loss, model.trainable_weights)
             optimizer.apply_gradients(zip(grads, model.trainable_weights))
