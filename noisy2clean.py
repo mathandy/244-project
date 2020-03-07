@@ -7,6 +7,7 @@ from scipy.io import wavfile
 from typing import List, Callable, Tuple
 import numpy as np
 import tensorflow as tf
+import os
 tfkl = tf.keras.layers
 
 
@@ -16,9 +17,9 @@ _DEFAULT_CONV_PARAMS = {
     'kernel_initializer': 'he_normal'
 }
 
-EPOCHS = 3
+EPOCHS = 10
 BATCH_SIZE = 128
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00001
 
 
 def pad(x, l=124621):
@@ -77,15 +78,14 @@ if __name__ == '__main__':
     y_ds = tf.data.Dataset.from_tensor_slices(y)
     ds = tf.data.Dataset.zip((x_ds, y_ds))
     ds = ds.shuffle(buffer_size=4*BATCH_SIZE).batch(BATCH_SIZE)
-
     # create model
     model = get_flat_denoiser()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
     loss_metric = tf.keras.metrics.Mean()
-    loss_fcn = tf.keras.losses.MSE
+    loss_fcn = tf.keras.losses.mean_absolute_error
 
     # train
-    for epoch in range(EPOCHS):
+    for epoch in range(1, EPOCHS+1):
         print('Start of epoch %d' % (epoch,))
         for step, (x_batch, y_batch) in enumerate(ds):
             with tf.GradientTape() as tape:
@@ -96,6 +96,16 @@ if __name__ == '__main__':
             optimizer.apply_gradients(zip(grads, model.trainable_weights))
 
             loss_metric(loss)
-
-            if step % 100 == 0:
+            if step % 30 == 0:
                 print('step %s: mean loss = %s' % (step, loss_metric.result()))
+            if step == 30:
+                path = f"/tmp/244/"
+                if not os.path.isdir(path):
+                    os.makedirs(path)
+                for i in range(5):
+                    true_wav = os.path.join(path, f"epoch{epoch}_{i}_true.wav")
+                    pred_wav = os.path.join(path, f"epoch{epoch}_{i}_pred.wav")
+                    wavfile.write(true_wav, 16000, y_batch[i].numpy())
+                    wavfile.write(pred_wav, 16000, yhat_batch[i].numpy())
+
+
