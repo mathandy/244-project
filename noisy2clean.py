@@ -1,13 +1,15 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
-from loader import loader
+from loader import loader, get_noise_filepaths
 
 import automatic_speech_recognition as asr
 from scipy.io import wavfile
 from typing import List, Callable, Tuple
 import numpy as np
 import tensorflow as tf
+from random import choice, randint
 tfkl = tf.keras.layers
+
 
 
 _DEFAULT_CONV_PARAMS = {
@@ -19,12 +21,13 @@ _DEFAULT_CONV_PARAMS = {
 EPOCHS = 3
 BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
+INPUT_LENGTH = 159744
 
 
-def pad(x, l=159744):
-    if len(x) == l:
+def pad(x, padded_length=INPUT_LENGTH):
+    if len(x) == padded_length:
         return x
-    return np.hstack((x, np.zeros(l - len(x))))
+    return np.hstack((x, np.zeros(padded_length - len(x))))
 
 
 def load_data():
@@ -67,15 +70,45 @@ def get_flat_denoiser():
     return model
 
 
+def noise_generator():
+    noise_filepaths = get_noise_filepaths()
+    noise_fp = choice(noise_filepaths)
+    return
+
+
 if __name__ == '__main__':
 
     # load dataset
-    x, y = load_data()
+    _, clean_audio = load_data()
 
     # create tensorflow dataset
-    x_ds = tf.data.Dataset.from_tensor_slices(x)
-    y_ds = tf.data.Dataset.from_tensor_slices(y)
-    ds = tf.data.Dataset.zip((x_ds, y_ds))
+    # ds_noise_fp = tf.data.Dataset.from_generator(noise_generator, tf.string)
+    ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio)
+    # ds = tf.data.Dataset.zip((ds_clean, ds_clean))
+
+    noise_filepaths = get_noise_filepaths()
+
+    @tf.function
+    def add_noise(clean_signal):
+        noise, sr = tf.audio.decode_wav(choice(noise_filepaths))
+        tf.cast(clean_signal, tf.float32)
+
+        # ensure noise is shorter than clean audio (trim if necessary)
+        pad_length = tf.shape(clean_signal)[0] - tf.shape(noise)[0]
+        if tf.shape(noise)[0] > tf.shape(clean_signal)[0]:
+            noise = noise[:tf.shape(clean_signal)[0]]
+
+        # pad noise to same length as clean audio
+        noise = tf.pad(noise, [[0, len(clean_signal) - len(noise)]])
+
+        # shift noise signal
+        noise = tf.roll(noise, randint(0, len(noise)-1), -1, name='noise_offset')
+
+        # tf.roll(input, shift, axis, name='noise_offset')
+        return 0.5 * (clean_signal + noise)
+
+    ds_noisy = ds_clean.map(add_noise)
+    ds = tf.data.Dataset.zip((ds_noisy, ds_clean))
     ds = ds.shuffle(buffer_size=1024).batch(BATCH_SIZE)
 
     # create model

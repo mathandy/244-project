@@ -1,6 +1,6 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
-from loader import loader
+from loader import loader, get_noise_filepaths
 
 import automatic_speech_recognition as asr
 from scipy.io import wavfile
