@@ -105,6 +105,21 @@ def get_loss_fcn():
     return ctc_loss
 
 
+def make_features(self, audio: np.ndarray) -> np.ndarray:
+    """ Use `python_speech_features` lib to extract log-spectrogram's. """
+    audio = self.normalize(audio.astype(np.float32))
+    audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
+    audio = self.pad(audio) if self.pad_to else audio
+    frames = python_speech_features.sigproc.framesig(
+        audio, self.frame_len, self.frame_step, self.winfunc
+    )
+    features = python_speech_features.sigproc.logpowspec(
+        frames, self.frame_len, norm=1
+    )
+    features = features[:, :self.features_num]  # Cut high frequency part
+    return self.standardize(features) if self.is_standardization else features
+
+
 if __name__ == '__main__':
 
     # load dataset
