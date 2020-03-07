@@ -21,7 +21,7 @@ BATCH_SIZE = 128
 LEARNING_RATE = 0.0001
 
 
-def pad(x, l=159744):
+def pad(x, l=124621):
     if len(x) == l:
         return x
     return np.hstack((x, np.zeros(l - len(x))))
