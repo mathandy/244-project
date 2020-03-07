@@ -76,7 +76,7 @@ if __name__ == '__main__':
     x_ds = tf.data.Dataset.from_tensor_slices(x)
     y_ds = tf.data.Dataset.from_tensor_slices(y)
     ds = tf.data.Dataset.zip((x_ds, y_ds))
-    ds = ds.shuffle(buffer_size=1024).batch(BATCH_SIZE)
+    ds = ds.shuffle(buffer_size=4*BATCH_SIZE).batch(BATCH_SIZE)
 
     # create model
     model = get_flat_denoiser()
