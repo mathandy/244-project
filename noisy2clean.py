@@ -60,7 +60,9 @@ def get_flat_denoiser():
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
         tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
         tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv3', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 3, name='den_conv4', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs))
         # tfkl.Flatten(),
         # tfkl.Dense(16000)
