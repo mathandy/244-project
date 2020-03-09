@@ -10,7 +10,7 @@ _DEFAULT_CONV_PARAMS = {
 }
 
 EPOCHS = 3
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 LEARNING_RATE = 0.0001
 INPUT_LENGTH = 159744
 
@@ -18,8 +18,9 @@ INPUT_LENGTH = 159744
 def get_flat_denoiser():
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
         tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs))
     ])

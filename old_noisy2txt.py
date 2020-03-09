@@ -1,6 +1,6 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
-from loader2 import load_as_tf_dataset
+from loader import loader
 
 import automatic_speech_recognition as asr
 from scipy.io import wavfile
@@ -19,6 +19,36 @@ _DEFAULT_CONV_PARAMS = {
 EPOCHS = 3
 BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
+
+
+def pad(x, l=159744):
+    if len(x) == l:
+        return x
+    return np.hstack((x, np.zeros(l - len(x))))
+
+
+def load_data():
+    clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
+
+    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
+
+    noisy_wavs_padded = \
+        np.array([pad(x) for x in noisy_wavs]).astype('float32')
+    noisy_wavs_padded = noisy_wavs_padded / noisy_wavs_padded.max()
+
+    # pretrained_pipeline = asr.load('deepspeech2', lang='en')
+    enc = asr.text.Alphabet(lang='en')._str_to_label
+
+    # enc = pretrained_pipeline._alphabet._str_to_label
+    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts_padded = \
+        np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
+
+    return clean_wavs_padded, noisy_wavs_padded, encoded_transcripts_padded
 
 
 def get_flat_denoiser():
@@ -49,17 +79,17 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     return predictions
 
 
-# def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
-#
-#     dataset = asr_pipeline.wrap_preprocess(dataset)
-#     dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
-#     if not our_model.optimizer:  # a loss function and an optimizer
-#         y = tfkl.Input(name='y', shape=[None], dtype='int32')
-#         loss = asr_pipeline.get_loss()
-#         our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
-#     tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
-#     print(tmp)
-#     return our_model
+def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
+
+    dataset = asr_pipeline.wrap_preprocess(dataset)
+    dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
+    if not our_model.optimizer:  # a loss function and an optimizer
+        y = tfkl.Input(name='y', shape=[None], dtype='int32')
+        loss = asr_pipeline.get_loss()
+        our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
+    tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
+    print(tmp)
+    return our_model
 
 
 def get_loss_fcn():
@@ -93,9 +123,13 @@ def make_features(self, audio: np.ndarray) -> np.ndarray:
 if __name__ == '__main__':
 
     # load dataset
-    ds_clean, ds_noisy = load_as_tf_dataset()
-    ds = tf.data.Dataset.zip((ds_noisy, ds_clean))
-    ds = ds.shuffle(buffer_size=1024).batch(BATCH_SIZE)
+    x_clean, x_noisy, y = load_data()
+
+    # create tensorflow dataset
+    x_ds = tf.data.Dataset.from_tensor_slices(x_noisy)
+    y_ds = tf.data.Dataset.from_tensor_slices(y)
+    ds = tf.data.Dataset.zip((x_ds, y_ds))
+    ds = ds.shuffle(buffer_size=1024).batch(32)
 
     # create denoiser model
     model = get_flat_denoiser()
