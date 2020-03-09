@@ -60,39 +60,6 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
 #     return our_model
 
 
-# def preprocess_example(self,
-#                batch: Tuple[List[np.ndarray], List[str]],
-#                is_extracted: bool = False,
-#                augmentation: augmentation.Augmentation = None
-#                ) -> Tuple[np.ndarray, np.ndarray]:
-#     """ Preprocess batch data to format understandable to a model. """
-#
-#     data, transcripts = batch
-#     if is_extracted:  # then just align features
-#         features = FeaturesExtractor.align(data)
-#     else:
-#         features = self._features_extractor(data)
-#     features = augmentation(features) if augmentation else features
-#     labels = self._alphabet.get_batch_labels(transcripts)
-#     return features, labels
-#
-#
-# def preprocess(audio_batch):
-#     """ Preprocess batch data to format understandable to a model. """
-#
-#     features_extractor = TFSpectrogram(
-#         features_num=160,
-#         samplerate=16000,
-#         winlen=0.02,
-#         winstep=0.01,
-#         winfunc=np.hanning
-#     )
-#
-#     features = features_extractor(audio_batch)
-#
-#     return features
-
-
 def get_loss_fcn():
     def get_length(tensor):
         lengths = tf.math.reduce_sum(tf.ones_like(tensor), 1)
@@ -104,21 +71,6 @@ def get_loss_fcn():
         return tf.nn.ctc_loss(labels, logits, label_length, logit_length,
                               logits_time_major=False, blank_index=-1)
     return ctc_loss
-
-
-# def make_features(self, audio: np.ndarray) -> np.ndarray:
-#     """ Use `python_speech_features` lib to extract log-spectrogram's. """
-#     audio = self.normalize(audio.astype(np.float32))
-#     audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
-#     audio = self.pad(audio) if self.pad_to else audio
-#     frames = python_speech_features.sigproc.framesig(
-#         audio, self.frame_len, self.frame_step, self.winfunc
-#     )
-#     features = python_speech_features.sigproc.logpowspec(
-#         frames, self.frame_len, norm=1
-#     )
-#     features = features[:, :self.features_num]  # Cut high frequency part
-#     return self.standardize(features) if self.is_standardization else features
 
 
 if __name__ == '__main__':
