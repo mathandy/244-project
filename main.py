@@ -112,9 +112,9 @@ if __name__ == '__main__':
         return np.hstack((x, np.zeros(l - len(x))))
 
 
-    # clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    # clean_wavs_padded = np.array([pad_or_trim(x) for x in clean_wavs]).astype('float32')
 
-    ### Seems do not need to pad the wav files
+    ### Seems do not need to pad_or_trim the wav files
     # normalize
     # max_ = 0
     # for i in range(len(clean_wavs)):

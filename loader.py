@@ -31,6 +31,15 @@ def loader():
     return samples
 
 
+def get_noise_filepaths(data_dir=os.path.join('noise')):
+    noise_filepaths = []
+    for fn in os.listdir(data_dir):
+        if not fn.endswith('.wav'):
+            continue
+        noise_filepaths.append(os.path.join(data_dir, fn))
+    return noise_filepaths
+
+
 # def loader():
 #     """Return a 6 (unshuffled) tf dataset objects:
 #         clean_audio, clean_audio_filepath, noisy_audio, noisy_audio_filepath, noise type, label

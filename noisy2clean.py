@@ -33,7 +33,7 @@ def load_data():
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
-    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    # pad_or_trim and normalize  ### MUST SHUFFLE AND SPLIT!
     clean_wavs_padded = \
         np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
