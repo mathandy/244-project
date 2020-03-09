@@ -3,7 +3,7 @@ from loader import loader, get_noise_filepaths
 import automatic_speech_recognition as asr
 import numpy as np
 import tensorflow as tf
-from random import choice, randint
+from random import choice
 tfkl = tf.keras.layers
 
 
@@ -16,7 +16,8 @@ _DEFAULT_CONV_PARAMS = {
 EPOCHS = 3
 BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
-INPUT_LENGTH = 159744
+# INPUT_LENGTH = 159744  # for data_small
+INPUT_LENGTH = 124621
 
 
 def pad(x, padded_length=INPUT_LENGTH):
@@ -25,7 +26,7 @@ def pad(x, padded_length=INPUT_LENGTH):
     return np.hstack((x, np.zeros(padded_length - len(x))))
 
 
-def load_data():
+def load_data(load_noisy=True):
     clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
@@ -49,17 +50,17 @@ def load_data():
         np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
 
     # return clean_wavs_padded, encoded_transcripts_padded
-    return noisy_wavs_padded, clean_wavs_padded
+    return (noisy_wavs_padded, clean_wavs_padded,
+            noisy_fps, clean_fps,
+            transcripts)
 
 
-def load_as_tf_dataset():
+def load_as_tf_dataset(return_transcripts=False):
     # load dataset
-    _, clean_audio = load_data()
+    _, clean_audio, _, clean_fps, transcripts = load_data()
 
     # create tensorflow dataset
-    # ds_noise_fp = tf.data.Dataset.from_generator(noise_generator, tf.string)
     ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio)
-    # ds = tf.data.Dataset.zip((ds_clean, ds_clean))
 
     noise_filepaths = get_noise_filepaths()
 
@@ -87,4 +88,11 @@ def load_as_tf_dataset():
         return 0.5 * (clean_signal + noise)
 
     ds_noisy = ds_clean.map(add_noise)
+
+    if return_transcripts:
+        alphabet = asr.text.Alphabet(lang='en')
+        encoded_transcripts = alphabet.get_batch_labels(transcripts)
+        ds_encoded_transcripts = \
+            tf.data.Dataset.from_tensor_slices(encoded_transcripts)
+        return ds_clean, ds_noisy, ds_encoded_transcripts
     return ds_clean, ds_noisy

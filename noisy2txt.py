@@ -1,10 +1,10 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
-from loader2 import load_as_tf_dataset
+from loader2 import load_as_tf_dataset, INPUT_LENGTH
+from spectrogram import TFSpectrogram
 
 import automatic_speech_recognition as asr
-from scipy.io import wavfile
-from typing import List, Callable, Tuple
+from typing import List
 import numpy as np
 import tensorflow as tf
 tfkl = tf.keras.layers
@@ -17,7 +17,7 @@ _DEFAULT_CONV_PARAMS = {
 }
 
 EPOCHS = 3
-BATCH_SIZE = 32
+BATCH_SIZE = 1
 LEARNING_RATE = 0.0001
 
 
@@ -27,9 +27,7 @@ def get_flat_denoiser():
         tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
         tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
         tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
-        tfkl.Lambda(lambda outputs: tf.squeeze(outputs))
-        # tfkl.Flatten(),
-        # tfkl.Dense(16000)
+        tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
     ])
     return model
 
@@ -62,6 +60,39 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
 #     return our_model
 
 
+# def preprocess_example(self,
+#                batch: Tuple[List[np.ndarray], List[str]],
+#                is_extracted: bool = False,
+#                augmentation: augmentation.Augmentation = None
+#                ) -> Tuple[np.ndarray, np.ndarray]:
+#     """ Preprocess batch data to format understandable to a model. """
+#
+#     data, transcripts = batch
+#     if is_extracted:  # then just align features
+#         features = FeaturesExtractor.align(data)
+#     else:
+#         features = self._features_extractor(data)
+#     features = augmentation(features) if augmentation else features
+#     labels = self._alphabet.get_batch_labels(transcripts)
+#     return features, labels
+#
+#
+# def preprocess(audio_batch):
+#     """ Preprocess batch data to format understandable to a model. """
+#
+#     features_extractor = TFSpectrogram(
+#         features_num=160,
+#         samplerate=16000,
+#         winlen=0.02,
+#         winstep=0.01,
+#         winfunc=np.hanning
+#     )
+#
+#     features = features_extractor(audio_batch)
+#
+#     return features
+
+
 def get_loss_fcn():
     def get_length(tensor):
         lengths = tf.math.reduce_sum(tf.ones_like(tensor), 1)
@@ -75,47 +106,59 @@ def get_loss_fcn():
     return ctc_loss
 
 
-def make_features(self, audio: np.ndarray) -> np.ndarray:
-    """ Use `python_speech_features` lib to extract log-spectrogram's. """
-    audio = self.normalize(audio.astype(np.float32))
-    audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
-    audio = self.pad(audio) if self.pad_to else audio
-    frames = python_speech_features.sigproc.framesig(
-        audio, self.frame_len, self.frame_step, self.winfunc
-    )
-    features = python_speech_features.sigproc.logpowspec(
-        frames, self.frame_len, norm=1
-    )
-    features = features[:, :self.features_num]  # Cut high frequency part
-    return self.standardize(features) if self.is_standardization else features
+# def make_features(self, audio: np.ndarray) -> np.ndarray:
+#     """ Use `python_speech_features` lib to extract log-spectrogram's. """
+#     audio = self.normalize(audio.astype(np.float32))
+#     audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
+#     audio = self.pad(audio) if self.pad_to else audio
+#     frames = python_speech_features.sigproc.framesig(
+#         audio, self.frame_len, self.frame_step, self.winfunc
+#     )
+#     features = python_speech_features.sigproc.logpowspec(
+#         frames, self.frame_len, norm=1
+#     )
+#     features = features[:, :self.features_num]  # Cut high frequency part
+#     return self.standardize(features) if self.is_standardization else features
 
 
 if __name__ == '__main__':
 
     # load dataset
-    ds_clean, ds_noisy = load_as_tf_dataset()
-    ds = tf.data.Dataset.zip((ds_noisy, ds_clean))
-    ds = ds.shuffle(buffer_size=1024).batch(BATCH_SIZE)
+    ds_clean, ds_noisy, ds_transcripts = load_as_tf_dataset(True)
 
-    # create denoiser model
-    model = get_flat_denoiser()
+    ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
+    ds = ds.shuffle(buffer_size=4*BATCH_SIZE)
+    ds = ds.batch(BATCH_SIZE)
+
+    # create model
+    denoiser_net = get_flat_denoiser()
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
+    deep_speech_v2 = pretrained_pipeline._model
+    features_extractor = TFSpectrogram(
+        audio_length=INPUT_LENGTH,
+        features_num=160,
+        samplerate=16000,
+        winlen=0.02,
+        winstep=0.01,
+        winfunc=np.hanning
+    )
     loss_fcn = get_loss_fcn()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
     loss_metric = tf.keras.metrics.Mean()
 
     # train
     for epoch in range(EPOCHS):
-        print('Start of epoch %d' % (epoch,))
-        for step, (x_batch, y_batch) in enumerate(ds):
+        print(f'Start of epoch {epoch}')
+        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds):
             with tf.GradientTape() as tape:
-                yhat_batch = model(x_batch)
-                features = pretrained_pipeline._features_extractor(x_batch)
-                batch_logits = pretrained_pipeline._model(features)
-                loss = loss_fcn(x_batch, yhat_batch)
+                denoised_audio_batch = denoiser_net(audio_batch)
+                features = features_extractor(denoised_audio_batch)
+                from IPython import embed; embed()  ### DEBUG
+                batch_logits = deep_speech_v2(features)
+                loss = loss_fcn(encoded_transcript_batch, batch_logits)
 
-            grads = tape.gradient(loss, model.trainable_weights)
-            optimizer.apply_gradients(zip(grads, model.trainable_weights))
+            grads = tape.gradient(loss, denoiser_net.trainable_weights)
+            optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
 
             loss_metric(loss)
 
