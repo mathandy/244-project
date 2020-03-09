@@ -31,7 +31,7 @@ def loader():
     return samples
 
 
-def get_noise_filepaths(data_dir=os.path.join('data', 'noise')):
+def get_noise_filepaths(data_dir=os.path.join('noise')):
     noise_filepaths = []
     for fn in os.listdir(data_dir):
         if not fn.endswith('.wav'):
