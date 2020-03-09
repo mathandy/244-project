@@ -32,7 +32,7 @@ def load_data():
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
-    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    # pad_or_trim and normalize  ### MUST SHUFFLE AND SPLIT!
     clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
@@ -109,7 +109,7 @@ def make_features(self, audio: np.ndarray) -> np.ndarray:
     """ Use `python_speech_features` lib to extract log-spectrogram's. """
     audio = self.normalize(audio.astype(np.float32))
     audio = (audio * np.iinfo(np.int16).max).astype(np.int16)
-    audio = self.pad(audio) if self.pad_to else audio
+    audio = self.pad_or_trim(audio) if self.pad_to else audio
     frames = python_speech_features.sigproc.framesig(
         audio, self.frame_len, self.frame_step, self.winfunc
     )

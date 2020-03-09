@@ -18,11 +18,12 @@ BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
 # INPUT_LENGTH = 159744  # for data_small
 INPUT_LENGTH = 124621
+# INPUT_LENGTH = 1000
 
 
-def pad(x, padded_length=INPUT_LENGTH):
-    if len(x) == padded_length:
-        return x
+def pad_or_trim(x, padded_length=INPUT_LENGTH):
+    if len(x) >= padded_length:
+        return x[:padded_length]
     return np.hstack((x, np.zeros(padded_length - len(x))))
 
 
@@ -31,13 +32,13 @@ def load_data(load_noisy=True):
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
-    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    # pad_or_trim and normalize  ### MUST SHUFFLE AND SPLIT!
     clean_wavs_padded = \
-        np.array([pad(x) for x in clean_wavs]).astype('float32')
+        np.array([pad_or_trim(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
 
     noisy_wavs_padded = \
-        np.array([pad(x) for x in noisy_wavs]).astype('float32')
+        np.array([pad_or_trim(x) for x in noisy_wavs]).astype('float32')
     noisy_wavs_padded = noisy_wavs_padded / noisy_wavs_padded.max()
 
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
@@ -47,7 +48,7 @@ def load_data(load_noisy=True):
     encoded_transcripts = \
         [[enc[char] for char in label] for label in transcripts]
     encoded_transcripts_padded = \
-        np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
+        np.array([pad_or_trim(x, 91) for x in encoded_transcripts], dtype='float32')
 
     # return clean_wavs_padded, encoded_transcripts_padded
     return (noisy_wavs_padded, clean_wavs_padded,
@@ -60,7 +61,8 @@ def load_as_tf_dataset(return_transcripts=False):
     _, clean_audio, _, clean_fps, transcripts = load_data()
 
     # create tensorflow dataset
-    ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio)
+    # ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio)
+    ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio[:, :INPUT_LENGTH])
 
     noise_filepaths = get_noise_filepaths()
 
@@ -80,7 +82,7 @@ def load_as_tf_dataset(return_transcripts=False):
             noise = tf.roll(noise, offset, -1, name='pre-trim_noise_offset')
             noise = noise[:tf.shape(clean_signal)[0]]
         else:
-            # pad to length of clean_signal, then randomly offset
+            # pad_or_trim to length of clean_signal, then randomly offset
             noise = tf.pad(noise, [[0, pad_length]])
             offset = tf.random.uniform((), 0, len(noise) - 1, tf.int32)
             noise = tf.roll(noise, offset, -1, name='post-pad_noise_offset')
