@@ -73,19 +73,24 @@ def get_loss_fcn():
     return ctc_loss
 
 
-if __name__ == '__main__':
+def main():
 
     # load dataset
     ds_clean, ds_noisy, ds_transcripts = load_as_tf_dataset(True)
 
     ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
     ds = ds.shuffle(buffer_size=4*BATCH_SIZE)
+    # ds = ds.shuffle(buffer_size=tf.data.experimental.AUTOTUNE)
     ds = ds.batch(BATCH_SIZE)
 
     # create model
     denoiser_net = get_flat_denoiser()
+    # deep_speech_v2 = asr.model.deepspeech2.get_deepspeech2(160, 29)
     pretrained_pipeline = asr.load('deepspeech2', lang='en')
     deep_speech_v2 = pretrained_pipeline._model
+    for layer in deep_speech_v2.layers:
+        layer.trainable = False
+
     features_extractor = TFSpectrogram(
         audio_length=INPUT_LENGTH,
         features_num=160,
@@ -94,6 +99,7 @@ if __name__ == '__main__':
         winstep=0.01,
         winfunc=np.hanning
     )
+
     loss_fcn = get_loss_fcn()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
     loss_metric = tf.keras.metrics.Mean()
@@ -102,10 +108,10 @@ if __name__ == '__main__':
     for epoch in range(EPOCHS):
         print(f'Start of epoch {epoch}')
         for step, (audio_batch, encoded_transcript_batch) in enumerate(ds):
+
             with tf.GradientTape() as tape:
                 denoised_audio_batch = denoiser_net(audio_batch)
                 features = features_extractor(denoised_audio_batch)
-                from IPython import embed; embed()  ### DEBUG
                 batch_logits = deep_speech_v2(features)
                 loss = loss_fcn(encoded_transcript_batch, batch_logits)
 
@@ -116,3 +122,7 @@ if __name__ == '__main__':
 
             if step % 100 == 0:
                 print('step %s: mean loss = %s' % (step, loss_metric.result()))
+
+
+if __name__ == '__main__':
+    main()
