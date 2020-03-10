@@ -87,7 +87,8 @@ def load_as_tf_dataset(return_transcripts=False):
             offset = tf.random.uniform((), 0, len(noise) - 1, tf.int32)
             noise = tf.roll(noise, offset, -1, name='post-pad_noise_offset')
 
-        return 0.5 * (clean_signal + noise)
+        alpha = 0.95
+        return alpha * clean_signal + (1 - alpha) * noise
 
     ds_noisy = ds_clean.map(add_noise)
 
