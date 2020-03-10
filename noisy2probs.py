@@ -24,7 +24,8 @@ EPOCHS = 3
 BATCH_SIZE = 1
 LEARNING_RATE = 0.0001
 RUN_NAME = str(int(round(time())))
-RESULTS_DIR = os.path.expanduser('~/244-project-results/noisy2txt/' + RUN_NAME)
+RESULTS_DIR = os.path.expanduser(
+    '~/244-project-results/noisy2probs/' + RUN_NAME)
 
 
 def get_flat_denoiser():
@@ -82,13 +83,6 @@ def get_loss_fcn():
 def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    # load dataset
-    ds_clean, ds_noisy, ds_transcripts = load_as_tf_dataset(True)
-    ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
-    ds = ds.shuffle(buffer_size=4*BATCH_SIZE)
-    # ds = ds.shuffle(buffer_size=tf.data.experimental.AUTOTUNE)
-    ds = ds.batch(BATCH_SIZE)
-
     # create model
     denoiser_net = get_flat_denoiser()
     deep_speech_v2 = asr.model.deepspeech2.get_deepspeech2(
@@ -98,7 +92,20 @@ def main():
     # deep_speech_v2 = pretrained_pipeline._model
     for layer in deep_speech_v2.layers:
         layer.trainable = False
-    features_extractor = TFSpectrogram(
+    loss_fcn = tf.keras.losses.kld
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
+    loss_metric = tf.keras.metrics.Mean()
+
+    # load dataset
+    ds_clean, ds_noisy, ds_transcripts = load_as_tf_dataset(True)
+    # ds_clean = pretrained_pipeline.features_extractor(ds_clean)
+    # shuffle and batch data
+    ds = tf.data.Dataset.zip((ds_noisy, ds_clean))
+    ds = ds.shuffle(buffer_size=4*BATCH_SIZE)
+    # ds = ds.shuffle(buffer_size=tf.data.experimental.AUTOTUNE)
+    ds = ds.batch(BATCH_SIZE)
+
+    tf_features_extractor = TFSpectrogram(
         audio_length=INPUT_LENGTH,
         features_num=160,
         samplerate=16000,
@@ -107,20 +114,37 @@ def main():
         winfunc=np.hanning
     )
 
-    loss_fcn = get_loss_fcn()
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
-    loss_metric = tf.keras.metrics.Mean()
+    # pass ds_clean through asr model
+    USE_NUMPY_FEATURES_FOR_CLEAN = False
+
+    if USE_NUMPY_FEATURES_FOR_CLEAN:
+        # @tf.numpy_function
+        # def np_features_extractor(audio_batch):
+        #     return np.array([pretrained_pipeline.features_extractor(x)
+        #                      for x in audio_batch])d
+        # def get_clean_features(noisy, clean):
+        #     return noisy, np_features_extractor(clean)
+        raise NotImplementedError
+    else:
+        def get_clean_features(noisy, clean):
+            return noisy, tf_features_extractor(clean)
+
+    def get_asr_probs_for_clean(noisy, clean_features):
+        return noisy, deep_speech_v2(clean_features)
+
+    ds = ds.map(get_clean_features)
+    ds = ds.map(get_asr_probs_for_clean)
 
     # train
     for epoch in range(EPOCHS):
         print(f'Start of epoch {epoch}')
-        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds):
+        for step, (noisy_audio_batch, clean_probs_batch) in enumerate(ds):
 
             with tf.GradientTape() as tape:
-                denoised_audio_batch = denoiser_net(audio_batch)
-                features = features_extractor(denoised_audio_batch)
+                denoised_audio_batch = denoiser_net(noisy_audio_batch)
+                features = tf_features_extractor(denoised_audio_batch)
                 batch_logits = deep_speech_v2(features)
-                loss = loss_fcn(encoded_transcript_batch, batch_logits)
+                loss = loss_fcn(clean_probs_batch, batch_logits)
 
             grads = tape.gradient(loss, denoiser_net.trainable_weights)
             optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
@@ -132,9 +156,9 @@ def main():
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
-                for k, denoised_sample in enumerate(audio_batch.numpy()):
+                for k, denoised_sample in enumerate(noisy_audio_batch.numpy()):
                     fp = os.path.join(RESULTS_DIR,
-                                      prefix + 'sample-{k}_input.wav')
+                                      prefix + 'sample-{k}_noisy.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
                 for k, denoised_sample in enumerate(denoised_audio_batch.numpy()):
                     fp = os.path.join(RESULTS_DIR,
