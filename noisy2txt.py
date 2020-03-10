@@ -30,9 +30,10 @@ RESULTS_DIR = os.path.expanduser('~/244-project-results/noisy2txt/' + RUN_NAME)
 def get_flat_denoiser():
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 13, name='den_conv2', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
     ])
     return model

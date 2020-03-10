@@ -3,6 +3,8 @@
 from loader2 import load_as_tf_dataset, INPUT_LENGTH
 from spectrogram import TFSpectrogram
 from util import renormalize_quantize_and_save
+from stft_model import build_model as get_stft_model
+from stft_eval import revert_features_to_audio
 
 import os
 from time import time
@@ -31,10 +33,10 @@ RESULTS_DIR = os.path.expanduser(
 def get_flat_denoiser():
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 13, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
     ])
     return model
@@ -85,7 +87,8 @@ def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     # create model
-    denoiser_net = get_flat_denoiser()
+    # denoiser_net = get_flat_denoiser()
+    denoiser_net = get_stft_model()
     deep_speech_v2 = asr.model.deepspeech2.get_deepspeech2(
         input_dim=160, output_dim=29, is_mixed_precision=False)
     deep_speech_v2.load_weights(os.path.join('data', 'ds2_weights.h5'))
@@ -93,8 +96,7 @@ def main():
     # deep_speech_v2 = pretrained_pipeline._model
     for layer in deep_speech_v2.layers:
         layer.trainable = False
-    # loss_fcn = tf.keras.losses.kld
-    loss_fcn = tf.keras.losses.MAE
+    loss_fcn = tf.keras.losses.kld
     # optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
     optimizer = tf.keras.optimizers.Adam(
         lr=LEARNING_RATE,
@@ -149,9 +151,9 @@ def main():
         for step, (noisy_audio_batch, clean_probs_batch) in enumerate(ds):
 
             with tf.GradientTape() as tape:
-                denoised_audio_batch = denoiser_net(noisy_audio_batch)
-                features = tf_features_extractor(denoised_audio_batch)
-                batch_logits = deep_speech_v2(features)
+                noisy_features = tf_features_extractor(noisy_audio_batch)
+                denoised_features = denoiser_net(noisy_features)
+                batch_logits = deep_speech_v2(denoised_features)
                 loss = loss_fcn(clean_probs_batch, batch_logits)
 
             grads = tape.gradient(loss, denoiser_net.trainable_weights)
@@ -168,9 +170,10 @@ def main():
                     fp = os.path.join(RESULTS_DIR,
                                       prefix + f'sample-{k}_noisy.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
-                for k, denoised_sample in enumerate(denoised_audio_batch.numpy()):
+                for k, denoised_sample in enumerate(denoised_features.numpy()):
                     fp = os.path.join(RESULTS_DIR,
                                       prefix + f'sample-{k}_denoised.wav')
+                    denoised_sample = revert_features_to_audio(denoised_features, )
                     renormalize_quantize_and_save(denoised_sample, fp)
 
 
