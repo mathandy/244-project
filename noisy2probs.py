@@ -158,11 +158,11 @@ def main():
                 prefix = f'epoch-{epoch}_step-{step}_'
                 for k, denoised_sample in enumerate(noisy_audio_batch.numpy()):
                     fp = os.path.join(RESULTS_DIR,
-                                      prefix + 'sample-{k}_noisy.wav')
+                                      prefix + f'sample-{k}_noisy.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
                 for k, denoised_sample in enumerate(denoised_audio_batch.numpy()):
                     fp = os.path.join(RESULTS_DIR,
-                                      prefix + 'sample-{k}_denoised.wav')
+                                      prefix + f'sample-{k}_denoised.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
 
 
