@@ -1,4 +1,5 @@
 import os
+from os.path import join as fpath
 from time import time
 
 
@@ -19,10 +20,9 @@ _DEFAULT_CONV_PARAMS = AttributeDict({
     'kernel_initializer': 'he_normal'
 })
 
-_DEFAULT_RESULTS_DIR_ROOT = \
-    os.path.expanduser('~/244-project-results/noisy2txt')
-_DEFAULT_LOG_DIR_ROOT = \
-    os.path.expanduser('~/244-project-logs/noisy2txt')
+_DEFAULT_RESULTS_DIR_ROOT = os.path.expanduser('~/244-project-results')
+_DEFAULT_LOG_DIR_ROOT = os.path.expanduser('~/244-project-logs')
+_run_type = 'unknown'
 _run_time = str(int(round(time())))
 
 _STATIC_DEFAULTS = AttributeDict({
@@ -34,10 +34,10 @@ _STATIC_DEFAULTS = AttributeDict({
 
 
 _DYNAMIC_DEFAULTS = AttributeDict({
-    'results_dir': lambda args_: os.path.join(
-        _DEFAULT_RESULTS_DIR_ROOT, args_.run_name),
-    'log_dir': lambda args_: os.path.join(
-        _DEFAULT_LOG_DIR_ROOT, args_.run_name),
+    'results_dir': lambda args_: fpath(
+        _DEFAULT_RESULTS_DIR_ROOT, args_.run_type, args_.run_name),
+    'log_dir': lambda args_: fpath(
+        _DEFAULT_LOG_DIR_ROOT, args_.run_type, args_.run_name),
     'shuffle_buffer_size': lambda args_: 4 * args_.batch_size,
 })
 
@@ -50,6 +50,10 @@ def derive_dynamic_args(args, dynamic_defaults=_DYNAMIC_DEFAULTS):
     return args
 
 
-def get_run_parameters():
+def get_run_parameters(custom_static_defaults={},
+                       custom_dynamic_defaults={}):
+    _STATIC_DEFAULTS.update(custom_static_defaults)
+    _DYNAMIC_DEFAULTS.update(custom_dynamic_defaults)
+
     args = _STATIC_DEFAULTS
     return derive_dynamic_args(args)

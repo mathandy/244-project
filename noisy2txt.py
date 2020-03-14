@@ -199,6 +199,6 @@ def main(args):
 
 
 if __name__ == '__main__':
-    from _params import get_run_parameters
-    run_args = get_run_parameters()
+    from parameters import get_run_parameters
+    run_args = get_run_parameters({'run_type': 'noisy2txt'})
     main(run_args)
