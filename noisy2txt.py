@@ -73,7 +73,6 @@ def prepare_data(args):
     ds_clean, ds_noisy, ds_transcripts, n_samples = load_as_tf_dataset(True)
     ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
     ds = ds.shuffle(buffer_size=args.shuffle_buffer_size)
-    # ds = ds.shuffle(buffer_size=4 * BATCH_SIZE)
 
     # split dataset
     # https://stackoverflow.com/questions/51125266
@@ -117,7 +116,9 @@ def main(args):
 
     loss_fcn = get_loss_fcn()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=args.learning_rate)
-    loss_metric = tf.keras.metrics.Mean()
+    train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
+    val_loss = tf.keras.metrics.Mean('val_loss', dtype=tf.float32)
+    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
 
     # for tensorboard
     train_summary_writer = tf.summary.create_file_writer(
@@ -139,14 +140,13 @@ def main(args):
             grads = tape.gradient(loss, denoiser_net.trainable_weights)
             optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
 
-            loss_metric(loss)
-            train_loss = loss_metric.result()
+            train_loss(loss)
 
             with train_summary_writer.as_default():
                 tf.summary.scalar('loss', train_loss.result(), step=epoch)
 
             if step % 100 == 0:
-                print('step %s: mean loss = %s' % (step, train_loss))
+                print('step %s: mean loss = %s' % (step, train_loss.result()))
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
@@ -164,9 +164,18 @@ def main(args):
             denoised_audio_batch = denoiser_net(audio_batch)
             features = features_extractor(denoised_audio_batch)
             batch_logits = deep_speech_v2(features)
-            val_loss = loss_fcn(encoded_transcript_batch, batch_logits)
+            loss = loss_fcn(encoded_transcript_batch, batch_logits)
+
+            val_loss(loss)
             with val_summary_writer.as_default():
                 tf.summary.scalar('loss', val_loss.result(), step=epoch)
+
+            print('epoch train loss:', train_loss.result())
+            print('epoch val loss:', val_loss.result())
+
+        # Reset metrics every epoch
+        train_loss.reset_states()
+        val_loss.reset_states()
 
     # test
     counter = 0
