@@ -103,3 +103,23 @@ def build_model(l2_strength, numFeatures, numSegments, learning_rate, beta_1, be
                   metrics=[tf.keras.metrics.RootMeanSquaredError('rmse')])
     return model
 
+def simple_denoiser(numFeatures, numSegments):
+    inputs = Input(shape=[numFeatures, numSegments, 1])
+    x = inputs
+
+    # -----
+    x = Conv2D(filters=3, kernel_size=[1, 8], strides=[1, 1], padding='valid', use_bias=False,)(x)
+    x = Activation('relu')(x)
+    x = BatchNormalization()(x)
+
+    x = Conv2D(filters=1, kernel_size=[3, 3], strides=[1, 1], padding='same', use_bias=False,)(x)
+    x = Activation('relu')(x)
+    x = BatchNormalization()(x)
+    model = Model(inputs=inputs, outputs=x)
+
+    optimizer = tf.keras.optimizers.Adam(1e-4, 0.9, 0.999, 0)
+    # optimizer = RAdam(total_steps=10000, warmup_proportion=0.1, min_lr=3e-4)
+
+    model.compile(optimizer=optimizer, loss='mse',
+                  metrics=[tf.keras.metrics.RootMeanSquaredError('rmse')])
+    return model

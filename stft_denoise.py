@@ -6,7 +6,7 @@ import tensorflow as tf
 import librosa.display
 import glob
 import numpy as np
-from stft_model import build_model
+from stft_model import build_model, simple_denoiser
 
 
 windowLength = 256
@@ -116,21 +116,21 @@ if __name__ == '__main__':
     # df = pd.DataFrame(parameters, columns=['learning rate', 'beta_1', 'beta_2', 'epsilon', 'loss'])
     # df.to_csv('parameters.csv', index=False)
 
-    model = build_model(l2_strength=0.0, numFeatures=numFeatures, numSegments=numSegments, learning_rate=0.01, beta_1=0.5,
-                        beta_2=0.3, epsilon=0)
-    model.load_weights('models/denoiser_cnn_log_mel_generator.h5')
-    baseline_val_loss = model.evaluate(test_dataset)[0]
+    # model = build_model(l2_strength=0.0, numFeatures=numFeatures, numSegments=numSegments, learning_rate=0.01, beta_1=0.5,beta_2=0.3, epsilon=0)
+    model = simple_denoiser(numFeatures, numSegments)
+    # model.load_weights('models/denoiser_cnn_log_mel_generator.h5')
+    # baseline_val_loss = model.evaluate(test_dataset)[0]
     early_stopping_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50,
-                                                               restore_best_weights=True, baseline=baseline_val_loss)
+                                                               restore_best_weights=True)
     logdir = os.path.join("logs", datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     tensorboard_callback = tf.keras.callbacks.TensorBoard(logdir, update_freq='batch')
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath='models/denoiser_cnn_log_mel_generator.h5',
                                                              monitor='val_loss', save_best_only=True)
 
     model.fit(train_dataset,
-              steps_per_epoch=600,
+              steps_per_epoch=200,
               validation_data=test_dataset,
-              epochs=190,
+              epochs=50,
               callbacks=[early_stopping_callback, tensorboard_callback, checkpoint_callback]
               )
 

@@ -71,7 +71,6 @@ def get_flat_denoiser():
     return model
 
 
-
 if __name__ == '__main__':
 
     # load dataset

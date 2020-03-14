@@ -23,15 +23,14 @@ def get_metrics(sources, destinations):
 pipeline = asr.load('deepspeech2', lang='en')
 pipeline.model.summary()     # TensorFlow model
 
-test_dataset = asr.dataset.Audio.from_csv('noisy/noisy_files.csv', batch_size=64)
+test_dataset = asr.dataset.Audio.from_csv('simple_denoised/denoised_files.csv', batch_size=128)
 metrics = []
 i = 0
 for data, transcripts in test_dataset:
     predictions = pipeline.predict(data)
     batch_metrics = get_metrics(predictions, transcripts)
     metrics.extend(batch_metrics)
-    i=i+1
-    print(i)
+    break
 metrics = pd.DataFrame(metrics)
 print(f'WER: {metrics.wer.mean()}    CER: {metrics.cer.mean()}')
 
