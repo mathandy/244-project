@@ -1,0 +1,54 @@
+import os
+from time import time
+
+
+class AttributeDict(dict):
+    """A class for dictionaries whose items also act like attributes
+
+    Credit:
+        https://stackoverflow.com/questions/4984647
+    """
+    def __init__(self, *args, **kwargs):
+        super(AttributeDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+
+_DEFAULT_CONV_PARAMS = AttributeDict({
+    'activation': 'relu',
+    'padding': 'same',
+    'kernel_initializer': 'he_normal'
+})
+
+_DEFAULT_RESULTS_DIR_ROOT = \
+    os.path.expanduser('~/244-project-results/noisy2txt')
+_DEFAULT_LOG_DIR_ROOT = '/tmp/logs_244-projects'
+_run_time = str(int(round(time())))
+
+_STATIC_DEFAULTS = AttributeDict({
+    'epochs': 3,
+    'batch_size': 1,
+    'learning_rate': 0.0001,
+    'run_name': _run_time,
+})
+
+
+_DYNAMIC_DEFAULTS = AttributeDict({
+    'results_dir': lambda args_: os.path.join(
+        _DEFAULT_RESULTS_DIR_ROOT, args_.run_name),
+    'log_dir': lambda args_: os.path.join(
+        _DEFAULT_LOG_DIR_ROOT, args_.run_name),
+    'shuffle_buffer_size': lambda args_: 4 * args_.batch_size,
+})
+
+
+def derive_dynamic_args(args, dynamic_defaults=_DYNAMIC_DEFAULTS):
+
+    for parameter_name, derivation_fcn in dynamic_defaults.items():
+        if args.get(parameter_name, None) is None:
+            args[parameter_name] = derivation_fcn(args)
+    return args
+
+
+def get_run_parameters():
+    args = _STATIC_DEFAULTS
+    return derive_dynamic_args(args)

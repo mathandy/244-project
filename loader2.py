@@ -60,6 +60,7 @@ def load_data(load_noisy=True):
 def load_as_tf_dataset(return_transcripts=False):
     # load dataset
     _, clean_audio, _, clean_fps, transcripts = load_data()
+    n_samples = len(clean_audio)
 
     # create tensorflow dataset
     # ds_clean = tf.data.Dataset.from_tensor_slices(clean_audio)
@@ -98,5 +99,5 @@ def load_as_tf_dataset(return_transcripts=False):
         encoded_transcripts = alphabet.get_batch_labels(transcripts)
         ds_encoded_transcripts = \
             tf.data.Dataset.from_tensor_slices(encoded_transcripts)
-        return ds_clean, ds_noisy, ds_encoded_transcripts
+        return ds_clean, ds_noisy, ds_encoded_transcripts, n_samples
     return ds_clean, ds_noisy

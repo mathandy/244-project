@@ -8,26 +8,13 @@ import os
 from time import time
 from typing import List
 import numpy as np
-from scipy.io import wavfile
 import automatic_speech_recognition as asr
 import tensorflow as tf
 tfkl = tf.keras.layers
 
 
-_DEFAULT_CONV_PARAMS = {
-    'activation': 'relu',
-    'padding': 'same',
-    'kernel_initializer': 'he_normal'
-}
-
-EPOCHS = 3
-BATCH_SIZE = 1
-LEARNING_RATE = 0.0001
-RUN_NAME = str(int(round(time())))
-RESULTS_DIR = os.path.expanduser('~/244-project-results/noisy2txt/' + RUN_NAME)
-
-
 def get_flat_denoiser():
+    from _params import _DEFAULT_CONV_PARAMS
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
         tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
@@ -80,15 +67,34 @@ def get_loss_fcn():
     return ctc_loss
 
 
-def main():
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-
-    # load dataset
-    ds_clean, ds_noisy, ds_transcripts = load_as_tf_dataset(True)
+def prepare_data(args):
+    # load and shuffle dataset
+    ds_clean, ds_noisy, ds_transcripts, n_samples = load_as_tf_dataset(True)
     ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
-    ds = ds.shuffle(buffer_size=4*BATCH_SIZE)
-    # ds = ds.shuffle(buffer_size=tf.data.experimental.AUTOTUNE)
-    ds = ds.batch(BATCH_SIZE)
+    ds = ds.shuffle(buffer_size=args.shuffle_buffer_size)
+    # ds = ds.shuffle(buffer_size=4 * BATCH_SIZE)
+
+    # split dataset
+    # https://stackoverflow.com/questions/51125266
+    train_size = int(0.7 * n_samples)
+    val_size = int(0.15 * n_samples)
+    test_size = int(0.15 * n_samples)
+
+    ds_train = ds.take(train_size)
+    ds_test = ds.skip(train_size)
+    ds_val = ds_test.skip(test_size)
+    ds_test = ds_test.take(test_size)
+
+    # batch dataset
+
+    ds = ds.batch(args.batch_size)
+    return ds_train, ds_val, ds_test
+
+
+def main(args):
+    os.makedirs(args.results_dir, exist_ok=True)
+
+    ds_train, ds_val, ds_test = prepare_data(args)
 
     # create model
     denoiser_net = get_flat_denoiser()
@@ -109,13 +115,19 @@ def main():
     )
 
     loss_fcn = get_loss_fcn()
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=args.learning_rate)
     loss_metric = tf.keras.metrics.Mean()
 
+    # for tensorboard
+    train_summary_writer = tf.summary.create_file_writer(
+        os.path.join(args.log_dir, 'train'))
+    val_summary_writer = tf.summary.create_file_writer(
+        os.path.join(args.log_dir, 'val'))
+
     # train
-    for epoch in range(EPOCHS):
+    for epoch in range(args.epochs):
         print(f'Start of epoch {epoch}')
-        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds):
+        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_train):
 
             with tf.GradientTape() as tape:
                 denoised_audio_batch = denoiser_net(audio_batch)
@@ -127,21 +139,45 @@ def main():
             optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
 
             loss_metric(loss)
+            train_loss = loss_metric.result()
+
+            with train_summary_writer.as_default():
+                tf.summary.scalar('loss', train_loss.result(), step=epoch)
 
             if step % 100 == 0:
-                print('step %s: mean loss = %s' % (step, loss_metric.result()))
+                print('step %s: mean loss = %s' % (step, train_loss))
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
                 for k, denoised_sample in enumerate(audio_batch.numpy()):
-                    fp = os.path.join(RESULTS_DIR,
+                    fp = os.path.join(args.results_dir,
                                       prefix + f'sample-{k}_input.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
                 for k, denoised_sample in enumerate(denoised_audio_batch.numpy()):
-                    fp = os.path.join(RESULTS_DIR,
+                    fp = os.path.join(args.results_dir,
                                       prefix + f'sample-{k}_denoised.wav')
                     renormalize_quantize_and_save(denoised_sample, fp)
 
+        # validate
+        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_val):
+            denoised_audio_batch = denoiser_net(audio_batch)
+            features = features_extractor(denoised_audio_batch)
+            batch_logits = deep_speech_v2(features)
+            val_loss = loss_fcn(encoded_transcript_batch, batch_logits)
+            with val_summary_writer.as_default():
+                tf.summary.scalar('loss', val_loss.result(), step=epoch)
+
+    # test
+    for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_test):
+        denoised_audio_batch = denoiser_net(audio_batch)
+        features = features_extractor(denoised_audio_batch)
+        batch_logits = deep_speech_v2(features)
+        test_loss = loss_fcn(encoded_transcript_batch, batch_logits)
+        with val_summary_writer.as_default():
+            tf.summary.scalar('loss', test_loss.result(), step=epoch)
+
 
 if __name__ == '__main__':
-    main()
+    from _params import get_run_parameters
+    args = get_run_parameters()
+    main(args)
