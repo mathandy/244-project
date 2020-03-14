@@ -5,6 +5,7 @@ from spectrogram import TFSpectrogram
 from util import renormalize_quantize_and_save
 
 import os
+from os.path import join as fpath
 from time import time
 from typing import List
 import numpy as np
@@ -100,7 +101,7 @@ def main(args):
     denoiser_net = get_flat_denoiser()
     deep_speech_v2 = asr.model.deepspeech2.get_deepspeech2(
         input_dim=160, output_dim=29, is_mixed_precision=False)
-    deep_speech_v2.load_weights(os.path.join('data', 'ds2_weights.h5'))
+    deep_speech_v2.load_weights(fpath('data', 'ds2_weights.h5'))
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
     # deep_speech_v2 = pretrained_pipeline._model
     for layer in deep_speech_v2.layers:
@@ -120,9 +121,9 @@ def main(args):
 
     # for tensorboard
     train_summary_writer = tf.summary.create_file_writer(
-        os.path.join(args.log_dir, 'train'))
+        fpath(args.log_dir, 'train'))
     val_summary_writer = tf.summary.create_file_writer(
-        os.path.join(args.log_dir, 'val'))
+        fpath(args.log_dir, 'val'))
 
     # train
     for epoch in range(args.epochs):
@@ -149,14 +150,14 @@ def main(args):
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
-                for k, denoised_sample in enumerate(audio_batch.numpy()):
-                    fp = os.path.join(args.results_dir,
-                                      prefix + f'sample-{k}_input.wav')
-                    renormalize_quantize_and_save(denoised_sample, fp)
-                for k, denoised_sample in enumerate(denoised_audio_batch.numpy()):
-                    fp = os.path.join(args.results_dir,
-                                      prefix + f'sample-{k}_denoised.wav')
-                    renormalize_quantize_and_save(denoised_sample, fp)
+                for k, sample in enumerate(audio_batch.numpy()):
+                    fp = fpath(args.results_dir,
+                               prefix + f'sample-{k}_input.wav')
+                    renormalize_quantize_and_save(sample, fp)
+                for k, sample in enumerate(denoised_audio_batch.numpy()):
+                    fp = fpath(args.results_dir,
+                               prefix + f'sample-{k}_denoised.wav')
+                    renormalize_quantize_and_save(sample, fp)
 
         # validate
         for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_val):
@@ -168,13 +169,24 @@ def main(args):
                 tf.summary.scalar('loss', val_loss.result(), step=epoch)
 
     # test
+    counter = 0
     for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_test):
         denoised_audio_batch = denoiser_net(audio_batch)
         features = features_extractor(denoised_audio_batch)
         batch_logits = deep_speech_v2(features)
         test_loss = loss_fcn(encoded_transcript_batch, batch_logits)
-        with val_summary_writer.as_default():
-            tf.summary.scalar('loss', test_loss.result(), step=epoch)
+        print("Test Loss:", test_loss)
+
+        # write samples to disk
+        prefix = f'test_'
+        for clean_sample, denoised_sample in \
+                zip(audio_batch.numpy(), denoised_audio_batch.numpy()):
+            fp = fpath(args.results_dir, prefix + f'{counter}_input.wav')
+            renormalize_quantize_and_save(clean_sample, fp)
+
+            fp = fpath(args.results_dir, prefix + f'{counter}_denoised.wav')
+            renormalize_quantize_and_save(denoised_sample, fp)
+            counter += 1
 
 
 if __name__ == '__main__':
