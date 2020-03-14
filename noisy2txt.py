@@ -6,7 +6,6 @@ from util import renormalize_quantize_and_save
 
 import os
 from os.path import join as fpath
-from time import time
 from typing import List
 import numpy as np
 import automatic_speech_recognition as asr
@@ -15,7 +14,7 @@ tfkl = tf.keras.layers
 
 
 def get_flat_denoiser():
-    from _params import _DEFAULT_CONV_PARAMS
+    from parameters import _DEFAULT_CONV_PARAMS
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
         tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
@@ -174,7 +173,6 @@ def main(args):
             print('epoch val loss:', val_loss.result())
 
         # Reset metrics every epoch
-        train_loss.reset_states()
         val_loss.reset_states()
 
     # test
