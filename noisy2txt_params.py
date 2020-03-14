@@ -21,7 +21,8 @@ _DEFAULT_CONV_PARAMS = AttributeDict({
 
 _DEFAULT_RESULTS_DIR_ROOT = \
     os.path.expanduser('~/244-project-results/noisy2txt')
-_DEFAULT_LOG_DIR_ROOT = '/tmp/logs_244-projects'
+_DEFAULT_LOG_DIR_ROOT = \
+    os.path.expanduser('~/244-project-logs/noisy2txt')
 _run_time = str(int(round(time())))
 
 _STATIC_DEFAULTS = AttributeDict({
