@@ -78,7 +78,6 @@ def prepare_data(args):
     # split dataset
     # https://stackoverflow.com/questions/51125266
     train_size = int(0.7 * n_samples)
-    val_size = int(0.15 * n_samples)
     test_size = int(0.15 * n_samples)
 
     ds_train = ds.take(train_size)
@@ -87,8 +86,9 @@ def prepare_data(args):
     ds_test = ds_test.take(test_size)
 
     # batch dataset
-
-    ds = ds.batch(args.batch_size)
+    ds_train = ds_train.batch(args.batch_size)
+    ds_val = ds_val.batch(args.batch_size)
+    ds_test = ds_test.batch(args.batch_size)
     return ds_train, ds_val, ds_test
 
 
@@ -191,5 +191,5 @@ def main(args):
 
 if __name__ == '__main__':
     from _params import get_run_parameters
-    args = get_run_parameters()
-    main(args)
+    run_args = get_run_parameters()
+    main(run_args)
