@@ -17,6 +17,7 @@ _DEFAULT_CONV_PARAMS = {
     'kernel_initializer': 'he_normal'
 }
 
+
 EPOCHS = 10
 BATCH_SIZE = 128
 LEARNING_RATE = 0.00001
@@ -33,7 +34,9 @@ def load_data():
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
+
     # pad_or_trim and normalize  ### MUST SHUFFLE AND SPLIT!
+
     clean_wavs_padded = \
         np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
