@@ -16,3 +16,9 @@ repository.
 # configuring the run
 You can adjust options for the run by editing (or adding entries to) 
 the `custom_static_params` dictionary at the bottom of "noisy2txt.py".
+
+
+# To listen to dataset as it will be fed to the model
+`python timit_loader.py`
+Note that this allows you to check that the transcripts are cropped 
+properly and that the noise level is as desired.
