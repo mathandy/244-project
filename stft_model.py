@@ -4,6 +4,7 @@ import tensorflow as tf
 
 
 def build_model(l2_strength, numFeatures, numSegments, learning_rate, beta_1, beta_2, epsilon):
+
     inputs = Input(shape=[numFeatures, numSegments, 1])
     x = inputs
 
@@ -95,7 +96,7 @@ def build_model(l2_strength, numFeatures, numSegments, learning_rate, beta_1, be
     x = Conv2D(filters=1, kernel_size=[129, 1], strides=[1, 1], padding='same')(x)
 
     model = Model(inputs=inputs, outputs=x)
-
+    
     optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1, beta_2, epsilon)
     # optimizer = RAdam(total_steps=10000, warmup_proportion=0.1, min_lr=3e-4)
 
@@ -123,3 +124,4 @@ def simple_denoiser(numFeatures, numSegments):
     model.compile(optimizer=optimizer, loss='mse',
                   metrics=[tf.keras.metrics.RootMeanSquaredError('rmse')])
     return model
+

@@ -8,6 +8,8 @@ from typing import List, Callable, Tuple
 import numpy as np
 import tensorflow as tf
 import os
+tfkl = tf.keras.layers
+
 
 _DEFAULT_CONV_PARAMS = {
     'activation': 'relu',
@@ -15,8 +17,9 @@ _DEFAULT_CONV_PARAMS = {
     'kernel_initializer': 'he_normal'
 }
 
-EPOCHS = 20
-BATCH_SIZE = 64
+
+EPOCHS = 10
+BATCH_SIZE = 128
 LEARNING_RATE = 0.00001
 
 
@@ -31,7 +34,9 @@ def load_data():
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
     clean_wavs = [wav.astype('float32') for wav in clean_wavs]
 
-    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+
+    # pad_or_trim and normalize  ### MUST SHUFFLE AND SPLIT!
+
     clean_wavs_padded = \
         np.array([pad(x) for x in clean_wavs]).astype('float32')
     clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
@@ -56,14 +61,11 @@ def load_data():
 def get_flat_denoiser():
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(16, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(16, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(16, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        # tfkl.Conv1D(16, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        # tfkl.Conv1D(16, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        # tfkl.Conv1D(16, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        # tfkl.Conv1D(16, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv3', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 3, name='den_conv4', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs))
         # tfkl.Flatten(),
         # tfkl.Dense(16000)
@@ -83,9 +85,8 @@ if __name__ == '__main__':
     ds = ds.shuffle(buffer_size=4*BATCH_SIZE).batch(BATCH_SIZE)
     # create model
     model = get_flat_denoiser()
-    optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
     loss_metric = tf.keras.metrics.Mean()
-    # loss_fcn = tf.keras.losses.mean_absolute_percentage_error
     loss_fcn = tf.keras.losses.mean_absolute_error
 
     # train
@@ -111,7 +112,5 @@ if __name__ == '__main__':
                     pred_wav = os.path.join(path, f"epoch{epoch}_{i}_pred.wav")
                     wavfile.write(true_wav, 16000, y_batch[i].numpy())
                     wavfile.write(pred_wav, 16000, yhat_batch[i].numpy())
-                    if epoch == 1:
-                        input_wav = os.path.join(path, f"{i}_input.wav")
-                        wavfile.write(input_wav, 16000, x_batch[i].numpy())
+
 

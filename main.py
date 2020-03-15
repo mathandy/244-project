@@ -86,6 +86,7 @@ def grad(model, inputs, targets):
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
+
 def align(arrays: list, default=0) -> np.ndarray:
     """ Pad arrays (default along time dimensions). Return the single
     array (batch_size, time, features). """
@@ -97,11 +98,20 @@ def align(arrays: list, default=0) -> np.ndarray:
         X[index, :time_dim] = array
     return X
 
+def generate_batches(noisy_wavs, clean_wavs, transcripts):
+    clean_dataset = tf.data.Dataset.from_tensor_slices(clean_wavs)
+    noisy_dataset = tf.data.Dataset.from_tensor_slices(noisy_wavs)
+    transcripts_dataset = tf.data.Dataset.from_tensor_slices(transcripts)
+    return tf.data.Dataset.zip((noisy_dataset, clean_dataset, transcripts_dataset))
+
+
+
 
 def pad(x, l=159744):
     if len(x) == l:
         return x
     return np.hstack((x, np.zeros(l - len(x))))
+
 
 
 def load_data():
