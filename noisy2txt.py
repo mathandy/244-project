@@ -13,14 +13,20 @@ import tensorflow as tf
 tfkl = tf.keras.layers
 
 
-def get_flat_denoiser():
-    from parameters import _DEFAULT_CONV_PARAMS
+_DEFAULT_CONV_PARAMS = {
+    'activation': 'relu',
+    'padding': 'same',
+    'kernel_initializer': 'he_normal'
+}
+
+
+def get_flat_denoiser(params=_DEFAULT_CONV_PARAMS):
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(64, 13, name='den_conv2', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 13, name='den_conv3', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 13, name='den_conv0', **params),
+        tfkl.Conv1D(64, 13, name='den_conv1', **params),
+        tfkl.Conv1D(64, 13, name='den_conv2', **params),
+        tfkl.Conv1D(1, 13, name='den_conv3', **params),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
     ])
     return model
@@ -207,8 +213,11 @@ if __name__ == '__main__':
         'input_length': 32000,
         'noisiness': 0.5,
         'epochs': 100,
-        'batch_size': 1
+        'batch_size': 1,
+        'results_dir_root': os.path.expanduser('~/244-project-results'),
+        'log_dir_root': os.path.expanduser('~/244-project-logs')
     }
+
     custom_dynamic_params = {}
 
     run_args = get_run_parameters(custom_static_params, custom_dynamic_params)

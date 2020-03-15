@@ -14,14 +14,6 @@ class AttributeDict(dict):
         self.__dict__ = self
 
 
-_DEFAULT_CONV_PARAMS = AttributeDict({
-    'activation': 'relu',
-    'padding': 'same',
-    'kernel_initializer': 'he_normal'
-})
-
-_DEFAULT_RESULTS_DIR_ROOT = os.path.expanduser('~/244-project-results')
-_DEFAULT_LOG_DIR_ROOT = os.path.expanduser('~/244-project-logs')
 _run_type = 'unknown'
 _run_time = str(int(round(time())))
 
@@ -30,15 +22,17 @@ _STATIC_DEFAULTS = AttributeDict({
     'batch_size': 1,
     'learning_rate': 0.0001,
     'run_name': _run_time,
-    'input_length': None
+    'input_length': None,
+    'results_dir_root': os.path.expanduser('~/244-project-results'),
+    'log_dir_root': os.path.expanduser('~/244-project-logs')
 })
 
 
 _DYNAMIC_DEFAULTS = AttributeDict({
     'results_dir': lambda args_: fpath(
-        _DEFAULT_RESULTS_DIR_ROOT, args_.run_type, args_.run_name),
+        args_.results_dir_root, args_.run_type, args_.run_name),
     'log_dir': lambda args_: fpath(
-        _DEFAULT_LOG_DIR_ROOT, args_.run_type, args_.run_name),
+        args_.log_dir_root, args_.run_type, args_.run_name),
     'shuffle_buffer_size': lambda args_: 4 * args_.batch_size,
 })
 
