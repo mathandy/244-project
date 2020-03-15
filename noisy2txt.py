@@ -191,7 +191,7 @@ def main(args):
             loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
             loss_mae = tf.keras.losses.mae(clean_audio_batch,
                                            denoised_audio_batch)
-            loss = ctc_weight * loss_ctc + mae_weight * loss_mae
+            # loss = ctc_weight * loss_ctc + mae_weight * loss_mae
 
             val_loss_ctc(loss_ctc)
             val_loss_mae(loss_mae)
