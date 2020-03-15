@@ -1,6 +1,6 @@
 # from unet import get_unet
 # from rnn_generator import get_generator
-from loader2 import load_as_tf_dataset, INPUT_LENGTH
+from timit_loader import load_timit_as_tf_dataset
 from spectrogram import TFSpectrogram
 from util import renormalize_quantize_and_save
 
@@ -19,8 +19,8 @@ def get_flat_denoiser():
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
         tfkl.Conv1D(64, 13, name='den_conv0', **_DEFAULT_CONV_PARAMS),
         tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(64, 13, name='den_conv1', **_DEFAULT_CONV_PARAMS),
-        tfkl.Conv1D(1, 13, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(64, 13, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 13, name='den_conv3', **_DEFAULT_CONV_PARAMS),
         tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
     ])
     return model
@@ -69,7 +69,9 @@ def get_loss_fcn():
 
 def prepare_data(args):
     # load and shuffle dataset
-    ds_clean, ds_noisy, ds_transcripts, n_samples = load_as_tf_dataset(True)
+    ds_clean, ds_noisy, ds_transcripts, n_samples = \
+        load_timit_as_tf_dataset(input_lenth=args.input_length,
+                                 noisiness=args.noisiness)
     ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
     ds = ds.shuffle(buffer_size=args.shuffle_buffer_size)
 
@@ -105,7 +107,7 @@ def main(args):
     for layer in deep_speech_v2.layers:
         layer.trainable = False
     features_extractor = TFSpectrogram(
-        audio_length=INPUT_LENGTH,
+        audio_length=args.input_length,
         features_num=160,
         samplerate=16000,
         winlen=0.02,
@@ -181,8 +183,8 @@ def main(args):
         denoised_audio_batch = denoiser_net(audio_batch)
         features = features_extractor(denoised_audio_batch)
         batch_logits = deep_speech_v2(features)
-        test_loss = loss_fcn(encoded_transcript_batch, batch_logits)
-        print("Test Loss:", test_loss)
+        loss = loss_fcn(encoded_transcript_batch, batch_logits)
+        test_loss(loss)
 
         # write samples to disk
         prefix = f'test_'
@@ -194,9 +196,20 @@ def main(args):
             fp = fpath(args.results_dir, prefix + f'{counter}_denoised.wav')
             renormalize_quantize_and_save(denoised_sample, fp)
             counter += 1
+    print("Test Loss:", test_loss.result())
 
 
 if __name__ == '__main__':
     from parameters import get_run_parameters
-    run_args = get_run_parameters({'run_type': 'noisy2txt'})
+
+    custom_static_params = {
+        'run_type': 'noisy2txt',
+        'input_length': 32000,
+        'noisiness': 0.5,
+        'epochs': 100,
+        'batch_size': 1
+    }
+    custom_dynamic_params = {}
+
+    run_args = get_run_parameters(custom_static_params, custom_dynamic_params)
     main(run_args)

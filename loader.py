@@ -36,7 +36,8 @@ def get_noise_filepaths(data_dir=os.path.join('noise')):
     for fn in os.listdir(data_dir):
         if not fn.endswith('.wav'):
             continue
-        noise_filepaths.append(os.path.join(data_dir, fn))
+        noise_filepaths.append(
+            os.path.abspath(os.path.join(data_dir, fn)))
     return noise_filepaths
 
 

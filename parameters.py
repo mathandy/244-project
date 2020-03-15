@@ -30,6 +30,7 @@ _STATIC_DEFAULTS = AttributeDict({
     'batch_size': 1,
     'learning_rate': 0.0001,
     'run_name': _run_time,
+    'input_length': None
 })
 
 
