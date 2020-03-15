@@ -169,7 +169,7 @@ def main(args):
                 print('step %s: (train) ctc loss = %s'
                       '' % (step, train_loss_ctc.result()))
                 print('step %s: (train) mae loss = %s'
-                      '' % (step, train_loss_ctc.result()))
+                      '' % (step, train_loss_mae.result()))
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
