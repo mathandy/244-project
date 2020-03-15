@@ -78,7 +78,7 @@ def prepare_data(args):
     ds_clean, ds_noisy, ds_transcripts, n_samples = \
         load_timit_as_tf_dataset(input_lenth=args.input_length,
                                  noisiness=args.noisiness)
-    ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts))
+    ds = tf.data.Dataset.zip((ds_noisy, ds_transcripts, ds_clean))
     ds = ds.shuffle(buffer_size=args.shuffle_buffer_size)
 
     # split dataset
@@ -123,9 +123,14 @@ def main(args):
 
     loss_fcn = get_loss_fcn()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=args.learning_rate)
-    train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
-    val_loss = tf.keras.metrics.Mean('val_loss', dtype=tf.float32)
-    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
+    train_loss_ctc = tf.keras.metrics.Mean('train_loss_ctc', dtype=tf.float32)
+    train_loss_mae = tf.keras.metrics.Mean('train_loss_mae', dtype=tf.float32)
+    val_loss_ctc = tf.keras.metrics.Mean('val_loss_ctc', dtype=tf.float32)
+    val_loss_mae = tf.keras.metrics.Mean('val_loss_mae', dtype=tf.float32)
+    test_loss_ctc = tf.keras.metrics.Mean('test_loss_ctc', dtype=tf.float32)
+    test_loss_mae = tf.keras.metrics.Mean('test_loss_mae', dtype=tf.float32)
+    ctc_weight = tf.constant(args.ctc_weight, dtype=tf.float32)
+    mae_weight = tf.constant(args.mae_weight, dtype=tf.float32)
 
     # for tensorboard
     train_summary_writer = tf.summary.create_file_writer(
@@ -136,28 +141,39 @@ def main(args):
     # train
     for epoch in range(args.epochs):
         print(f'Start of epoch {epoch}')
-        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_train):
+        for step, (noisy_audio_batch, enc_transcript_batch, clean_audio_batch) \
+                in enumerate(ds_train):
 
             with tf.GradientTape() as tape:
-                denoised_audio_batch = denoiser_net(audio_batch)
+                denoised_audio_batch = denoiser_net(noisy_audio_batch)
                 features = features_extractor(denoised_audio_batch)
                 batch_logits = deep_speech_v2(features)
-                loss = loss_fcn(encoded_transcript_batch, batch_logits)
+                loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
+                loss_mae = tf.keras.losses.mae(clean_audio_batch,
+                                               denoised_audio_batch)
+                loss = ctc_weight*loss_ctc + mae_weight*loss_mae
 
             grads = tape.gradient(loss, denoiser_net.trainable_weights)
             optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
 
-            train_loss(loss)
+            train_loss_ctc(loss_ctc)
+            train_loss_mae(loss_mae)
 
             with train_summary_writer.as_default():
-                tf.summary.scalar('loss', train_loss.result(), step=epoch)
+                tf.summary.scalar(
+                    'train_loss_ctc', train_loss_ctc.result(), step=epoch)
+                tf.summary.scalar(
+                    'train_loss_mae', train_loss_mae.result(), step=epoch)
 
             if step % 100 == 0:
-                print('step %s: mean loss = %s' % (step, train_loss.result()))
+                print('step %s: (train) ctc loss = %s'
+                      '' % (step, train_loss_ctc.result()))
+                print('step %s: (train) mae loss = %s'
+                      '' % (step, train_loss_ctc.result()))
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
-                for k, sample in enumerate(audio_batch.numpy()):
+                for k, sample in enumerate(noisy_audio_batch.numpy()):
                     fp = fpath(args.results_dir,
                                prefix + f'sample-{k}_input.wav')
                     renormalize_quantize_and_save(sample, fp)
@@ -167,42 +183,58 @@ def main(args):
                     renormalize_quantize_and_save(sample, fp)
 
         # validate
-        for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_val):
-            denoised_audio_batch = denoiser_net(audio_batch)
+        for step, (noisy_audio_batch, enc_transcript_batch, clean_audio_batch) \
+                in enumerate(ds_val):
+            denoised_audio_batch = denoiser_net(noisy_audio_batch)
             features = features_extractor(denoised_audio_batch)
             batch_logits = deep_speech_v2(features)
-            loss = loss_fcn(encoded_transcript_batch, batch_logits)
+            loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
+            loss_mae = tf.keras.losses.mae(clean_audio_batch,
+                                           denoised_audio_batch)
+            loss = ctc_weight * loss_ctc + mae_weight * loss_mae
 
-            val_loss(loss)
+            val_loss_ctc(loss_ctc)
+            val_loss_mae(loss_mae)
             with val_summary_writer.as_default():
-                tf.summary.scalar('loss', val_loss.result(), step=epoch)
+                tf.summary.scalar('val_loss_ctc', val_loss_ctc.result(), step=epoch)
+                tf.summary.scalar('val_loss_mae', val_loss_mae.result(), step=epoch)
 
-            print('epoch train loss:', train_loss.result())
-            print('epoch val loss:', val_loss.result())
+        print(f'epoch {epoch}: val ctc loss:', val_loss_ctc.result())
+        print(f'epoch {epoch}: val mae loss:', val_loss_mae.result())
 
         # Reset metrics every epoch
-        val_loss.reset_states()
+        val_loss_ctc.reset_states()
+        val_loss_mae.reset_states()
+        train_loss_ctc.reset_states()
+        train_loss_mae.reset_states()
 
     # test
     counter = 0
-    for step, (audio_batch, encoded_transcript_batch) in enumerate(ds_test):
-        denoised_audio_batch = denoiser_net(audio_batch)
+    for step, (noisy_audio_batch, enc_transcript_batch, clean_audio_batch) in \
+            enumerate(ds_test):
+        denoised_audio_batch = denoiser_net(noisy_audio_batch)
         features = features_extractor(denoised_audio_batch)
         batch_logits = deep_speech_v2(features)
-        loss = loss_fcn(encoded_transcript_batch, batch_logits)
-        test_loss(loss)
+        loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
+        loss_mae = tf.keras.losses.mae(clean_audio_batch,
+                                       denoised_audio_batch)
+        # loss = ctc_weight * loss_ctc + mae_weight * loss_mae
+
+        test_loss_ctc(loss_ctc)
+        test_loss_mae(loss_mae)
 
         # write samples to disk
         prefix = f'test_'
         for clean_sample, denoised_sample in \
-                zip(audio_batch.numpy(), denoised_audio_batch.numpy()):
+                zip(noisy_audio_batch.numpy(), denoised_audio_batch.numpy()):
             fp = fpath(args.results_dir, prefix + f'{counter}_input.wav')
             renormalize_quantize_and_save(clean_sample, fp)
 
             fp = fpath(args.results_dir, prefix + f'{counter}_denoised.wav')
             renormalize_quantize_and_save(denoised_sample, fp)
             counter += 1
-    print("Test Loss:", test_loss.result())
+    print("Test CTC Loss:", test_loss_ctc.result())
+    print("Test MAE Loss:", test_loss_mae.result())
 
 
 if __name__ == '__main__':
@@ -214,6 +246,8 @@ if __name__ == '__main__':
         'noisiness': 0.5,
         'epochs': 100,
         'batch_size': 1,
+        'mae_weight': 1.,
+        'ctc_weight': 1.,
         'results_dir_root': os.path.expanduser('~/244-project-results'),
         'log_dir_root': os.path.expanduser('~/244-project-logs')
     }
