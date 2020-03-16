@@ -1,6 +1,6 @@
 from data_processing.feature_extractor import FeatureExtractor
 import numpy as np
-from stft_model import build_model
+from stft_model import build_model, simple_denoiser
 from scipy.io import wavfile
 import librosa
 import pandas as pd
@@ -101,9 +101,9 @@ def SDR(denoised, cleaned, eps=1e-7): # Signal to Distortion Ratio
 
 
 if __name__ == '__main__':
-    model = build_model(l2_strength=0.0, numFeatures=numFeatures, numSegments=numSegments, learning_rate=0.01, beta_1=0.5,
-                        beta_2=0.3, epsilon=0)
-    model.load_weights('models/denoiser_cnn_0.01_learning_rate.h5')
+    # model = build_model(l2_strength=0.0, numFeatures=numFeatures, numSegments=numSegments, learning_rate=0.01, beta_1=0.5, beta_2=0.3, epsilon=0)
+    model = simple_denoiser(numFeatures=numFeatures, numSegments=numSegments)
+    model.load_weights('models/denoiser_cnn_log_mel_generator.h5')
     test = pd.read_csv("data/test.csv")
     noise_audios = pd.read_csv("data/test_noise.csv")["noise"]
     transcripts = test['transcript']
@@ -114,7 +114,7 @@ if __name__ == '__main__':
         noise_name = noise.split("/")[-1].split(".")[0]
         sdr = 0
         # TODO: change the noisy here if storing denoised files
-        directory_to_store = os.path.join("denoised", noise_name)
+        directory_to_store = os.path.join("simple_denoised", noise_name)
         if not os.path.isdir(directory_to_store):
             os.makedirs(directory_to_store)
         denoised_audios = []
@@ -129,8 +129,7 @@ if __name__ == '__main__':
             denoised_audios.append(denoised_audio_path)
         denoised_files[noise_name] = denoised_audios
         print(f"{noise_name}:  {sdr / len(clean_audios)}")
-    denoised_files.to_csv("denoised/denoised_files.csv", index=False)
-
+    denoised_files.to_csv("simple_denoised/denoised_files.csv", index=False)
 
 
 

@@ -16,41 +16,36 @@ _DEFAULT_CONV_PARAMS = {
     'kernel_initializer': 'he_normal'
 }
 
+EPOCHS = 3
 
-def simple_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
+
+def feature_denoiser(x, conv_params=_DEFAULT_CONV_PARAMS):
     x = tfkl.Conv2D(64, 3, name='den_conv0', **conv_params)(x)
     x = tfkl.Conv2D(64, 3, name='den_conv1', **conv_params)(x)
     x = tfkl.Conv2D(1, 3, name='den_conv2', **conv_params)(x)
     return tf.squeeze(x, 3)
 
 
-# def our_model(pretrained_pipeline, sample_shape):
-#
-#     inputs = tfkl.Input(shape=sample_shape)
-#     # features = pretrained_pipeline._features_extractor(inputs)
-#
-#     denoised_features = tf.squeeze(simple_denoiser(inputs), -1)
-#     # denoised_features = get_generator()(features)
-#     # denoised_features = unet(input_size=(256, 256, 1))(features)
-#
-#     batch_logits = pretrained_pipeline._model(denoised_features)
-#
-#     model = tf.keras.Model(inputs=inputs, outputs=batch_logits)
-#
-#     return model
+class FlatDenoiser(tf.keras.Model):
+    def __init__(self, *args, conv_params=_DEFAULT_CONV_PARAMS, **kwargs):
+        super(FlatDenoiser, self).__init__(*args, **kwargs)
+        self.conv_params = conv_params
+        self.built_layers = None
 
+    def build(self, input_shape):
+        self.built_layers = [
+            tfkl.Conv1D(8, 3, name='den_conv0', **self.conv_params),
+            tfkl.Conv1D(8, 3, name='den_conv1', **self.conv_params),
+            tfkl.Conv1D(8, 3, name='den_conv2', **self.conv_params),
+            tfkl.Flatten(),
+            tfkl.Dense(input_shape[-1])
+        ]
 
-# def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
-#
-#     dataset = asr_pipeline.wrap_preprocess(dataset)
-#     dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
-#     if not our_model.optimizer:  # a loss function and an optimizer
-#         y = tfkl.Input(name='y', shape=[None], dtype='int32')
-#         loss = asr_pipeline.get_loss()
-#         our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
-#     tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
-#     print(tmp)
-#     return our_model
+    def call(self, inputs, training=True):
+        a = tf.expand_dims(inputs, -1)
+        for layer in self.built_layers:
+            a = layer(a)
+        return a
 
 
 def decode(asr_pipeline, batch_logits):
@@ -82,7 +77,7 @@ def loss(model, x, y, training):
     # behavior during training versus inference (e.g. Dropout).
     y_ = model(x, training=training)
     loss_object = tf.keras.losses.MSE
-    return loss_object(y_true=y, y_pred=y_)
+    return tf.reduce_sum(loss_object(y_true=y, y_pred=y_))
 
 
 def grad(model, inputs, targets):
@@ -91,6 +86,18 @@ def grad(model, inputs, targets):
     return loss_value, tape.gradient(loss_value, model.trainable_variables)
 
 
+
+def align(arrays: list, default=0) -> np.ndarray:
+    """ Pad arrays (default along time dimensions). Return the single
+    array (batch_size, time, features). """
+    max_array = max(arrays, key=len)
+    X = np.full(shape=[len(arrays), *max_array.shape],
+                fill_value=default, dtype=float)
+    for index, array in enumerate(arrays):
+        time_dim, features_dim = array.shape
+        X[index, :time_dim] = array
+    return X
+
 def generate_batches(noisy_wavs, clean_wavs, transcripts):
     clean_dataset = tf.data.Dataset.from_tensor_slices(clean_wavs)
     noisy_dataset = tf.data.Dataset.from_tensor_slices(noisy_wavs)
@@ -98,90 +105,77 @@ def generate_batches(noisy_wavs, clean_wavs, transcripts):
     return tf.data.Dataset.zip((noisy_dataset, clean_dataset, transcripts_dataset))
 
 
+
+
+def pad(x, l=159744):
+    if len(x) == l:
+        return x
+    return np.hstack((x, np.zeros(l - len(x))))
+
+
+
+def load_data():
+    clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
+    clean_wavs = [wav.astype('float32') for wav in clean_wavs]
+
+    # pad and normalize  ### MUST SHUFFLE AND SPLIT!
+    clean_wavs_padded = np.array([pad(x) for x in clean_wavs]).astype('float32')
+    clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
+
+    # pretrained_pipeline = asr.load('deepspeech2', lang='en')
+    enc = asr.text.Alphabet(lang='en')._str_to_label
+
+    # enc = pretrained_pipeline._alphabet._str_to_label
+    encoded_transcripts = [[enc[char] for char in label] for label in transcripts]
+    encoded_transcripts_padded = \
+        np.array([pad(x, 91) for x in encoded_transcripts], dtype='float32')
+
+    return clean_wavs_padded, encoded_transcripts_padded
+
+
+def get_flat_denoiser():
+    model = tf.keras.models.Sequential(layers=[
+        tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
+        tfkl.Conv1D(8, 3, name='den_conv0', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(8, 3, name='den_conv1', **_DEFAULT_CONV_PARAMS),
+        tfkl.Conv1D(1, 3, name='den_conv2', **_DEFAULT_CONV_PARAMS),
+        tfkl.Lambda(lambda outputs: tf.squeeze(outputs))
+        # tfkl.Flatten(),
+        # tfkl.Dense(16000)
+    ])
+    return model
+
+
 if __name__ == '__main__':
-    # test_asr_pipeline()
 
     # load dataset
-    # dataset, dev_dataset, shape_of_single_wav = ...
-    clean_wavs, noisy_wavs, clean_fps, noisy_fps, transcripts = zip(*loader())
+    x, y = load_data()
 
-    ### MUST SHUFFLE AND SPLIT!
-    def pad(x, l=159744):
-        if len(x) == l:
-            return x
-        return np.hstack((x, np.zeros(l - len(x))))
+    # create tensorflow dataset
+    x_ds = tf.data.Dataset.from_tensor_slices(x)
+    y_ds = tf.data.Dataset.from_tensor_slices(y)
+    ds = tf.data.Dataset.zip((x_ds, y_ds))
+    ds = ds.shuffle(buffer_size=1024).batch(32)
 
-
-    # clean_wavs_padded = np.array([pad_or_trim(x) for x in clean_wavs]).astype('float32')
-
-    ### Seems do not need to pad_or_trim the wav files
-    # normalize
-    # max_ = 0
-    # for i in range(len(clean_wavs)):
-    #     temp_max = clean_wavs[i].max()
-    #     if max_ < temp_max:
-    #         max_ = temp_max
-    # clean_wavs = [x / max_ for x in clean_wavs]
-    # clean_wavs_padded = clean_wavs_padded / clean_wavs_padded.max()
-
-    pretrained_pipeline = asr.load('deepspeech2', lang='en')
-
-    enc = pretrained_pipeline._alphabet._str_to_label
-    encoded_transcripts = \
-        [[enc[char] for char in label] for label in transcripts]
-    encoded_transcripts_padded = \
-        np.array([pad(x, 91) for x in encoded_transcripts])
-
-    features_clean = pretrained_pipeline._features_extractor(clean_wavs)
-    features_noisy = pretrained_pipeline._features_extractor(noisy_wavs)
-
-    train_data_clean = (np.expand_dims(features_clean, -1), encoded_transcripts_padded)
-    train_data_noisy = (np.expand_dims(features_noisy, -1), encoded_transcripts_padded)
-
-    features_clean = np.expand_dims(features_clean, -1)
-    features_noisy = np.expand_dims(features_noisy, -1)
-
-    # working full pipeline inference example
-    # we could use https://www.tensorflow.org/tutorials/customization/autodiff
-    batch_size = 5
-
-    model = tf.keras.Sequential([
-        tfkl.Conv2D(64, 3, name='den_conv0', padding='SAME'),
-        tfkl.Conv2D(64, 3, name='den_conv1', padding='SAME'),
-        tfkl.Conv2D(1, 3, name='den_conv2', padding='SAME')
-    ])
-    # den = simple_denoiser(features_noisy[:batch_size, :, :, None])
-    train_feature_noisy = features_noisy[:batch_size]
-    train_feature_clean = features_clean[:batch_size]
+    # create model
+    model = get_flat_denoiser()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.0000001)
-    loss_value, grads = grad(model, train_feature_noisy, train_feature_clean)
+    loss_metric = tf.keras.metrics.Mean()
+    loss_fcn = tf.keras.losses.MSE
 
-    print("Step: {}, Initial Loss: {}".format(optimizer.iterations.numpy(), loss_value.numpy()))
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    print("Step: {},          Loss: {}".format(optimizer.iterations.numpy(),
-                                               loss(model, train_feature_noisy, train_feature_clean, training=True).numpy()))
+    # train
+    for epoch in range(EPOCHS):
+        print('Start of epoch %d' % (epoch,))
+        for step, (x_batch, y_batch) in enumerate(ds):
+            with tf.GradientTape() as tape:
+                yhat_batch = model(x_batch)
+                loss = loss_fcn(x_batch, yhat_batch)
 
-    predictions = model(train_feature_noisy)
-    tf.nn.softmax(predictions)
+            grads = tape.gradient(loss, model.trainable_weights)
+            optimizer.apply_gradients(zip(grads, model.trainable_weights))
 
+            loss_metric(loss)
 
-
-    # feature_batch = np.expand_dims(features[:batch_size], -1)
-    # ## previous denoiser
-    # # den = simple_denoiser(feature_batch)
-    # y = pretrained_pipeline._model(den)
-    #
-    # predictions = pretrained_pipeline.decoder(y)
-    # decoded_predictions = \
-    #     [[pretrained_pipeline._alphabet._label_to_str[char] for char in l]
-    #      for l in predictions]
-    # print(decoded_predictions)
-
-
-
-
-
-
-    # FIX THIS CODE BELOW
-    # m = our_model(pretrained_pipeline, train_data[0].shape[1:])
-    # fit(m, pretrained_pipeline, train_data, val_data)
+            if step % 100 == 0:
+                print('step %s: mean loss = %s' % (step, loss_metric.result()))
