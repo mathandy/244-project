@@ -10,7 +10,19 @@ import tensorflow as tf
 import automatic_speech_recognition as asr
 
 
-TIMIT_DATA_DIR = os.path.expanduser('~/244/data/timit/data')
+TIMIT_DATA_DIR = os.path.join('data_timit', 'data')
+KAGGLE_URL = r"https://www.kaggle.com/mfekadu/" \
+             r"darpa-timit-acousticphonetic-continuous-speech"
+NO_TIMIT_DATA_ERROR_MESSAGE = (
+        f"The expected path to the TIMIT dataset, {TIMIT_DATA_DIR}, "
+        f"does not exist.\n"
+        f"Please download the dataset from \n{KAGGLE_URL}\n and "
+        f"unzip directly into the 'data_timit' directory.  If you've "
+        f"got the directory story correct, the path "
+        f"'{os.path.join(TIMIT_DATA_DIR, 'TRAIN')}' will exist.\n"
+        f"If you already have TIMIT, you can just point "
+        f"`TIMIT_DATA_DIR` in 'timit_loader.py' to TIMIT's 'data' directory."
+)
 
 
 def load(root_dir=TIMIT_DATA_DIR, subset='train'):
@@ -119,6 +131,8 @@ def load_timit_as_tf_dataset(subset="train", input_lenth=None, noisiness=0.5):
 if __name__ == '__main__':
     from tempfile import gettempdir
     from util import renormalize_quantize_and_save
+
+    # create temp dir to store wav files created
     tmpdir = fpath(gettempdir(), 'timit_loader_test')
     os.makedirs(tmpdir, exist_ok=True)
 
