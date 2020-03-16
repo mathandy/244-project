@@ -1,6 +1,21 @@
 import automatic_speech_recognition as asr
-from automatic_speech_recognition.load import weights
 import tensorflow as tf
+import os
+
+
+def weights(lang: str, name: str, version: float):
+    """ Model weights are stored in the Google Cloud Bucket. """
+    def closure(loader):
+        """ The wrapper is required to run downloading after a call. """
+        def wrapper() -> asr.pipeline.Pipeline:
+            bucket = 'automatic-speech-recognition'
+            file_name = f'{lang}-{name}-weights-{version}.h5'
+            remote_path = file_name
+            local_path = f'{os.path.dirname(__file__)}/models/{file_name}'
+            asr.utils.maybe_download_from_bucket(bucket, remote_path, local_path)
+            return loader(weights_path=local_path)
+        return wrapper
+    return closure
 
 
 @weights(lang='en', name='deepspeech2', version=0.1)
