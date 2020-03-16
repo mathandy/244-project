@@ -3,6 +3,7 @@
 # setup
 * install tensorflow (we used version 2.1.0)
 * `pip install -r requirements.txt`
+* `python get_ds2_weights.py`
 
 # get the data
 download the TIMIT dataset from [this kaggle url]

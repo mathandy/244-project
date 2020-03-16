@@ -246,6 +246,10 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(TIMIT_DATA_DIR, "TRAIN")):
         raise FileNotFoundError(NO_TIMIT_DATA_ERROR_MESSAGE)
 
+    if not os.path.exists('ds2_weights.h5'):
+        from get_ds2_weights import save_ds2_weights
+        save_ds2_weights('ds2_weights.h5')
+
     custom_static_params = {
         'run_type': 'noisy2txt',
         'input_length': 32000,
