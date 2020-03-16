@@ -15,11 +15,11 @@ KAGGLE_URL = r"https://www.kaggle.com/mfekadu/" \
              r"darpa-timit-acousticphonetic-continuous-speech"
 NO_TIMIT_DATA_ERROR_MESSAGE = (
         f"The expected path to the TIMIT dataset, {TIMIT_DATA_DIR}, "
-        f"does not exist.\n"
+        f"does not exist.\n\n\n"
         f"Please download the dataset from \n{KAGGLE_URL}\n and "
         f"unzip directly into the 'data_timit' directory.  If you've "
         f"got the directory story correct, the path "
-        f"'{os.path.join(TIMIT_DATA_DIR, 'TRAIN')}' will exist.\n"
+        f"'{os.path.join(TIMIT_DATA_DIR, 'TRAIN')}' will exist.\n\n"
         f"If you already have TIMIT, you can just point "
         f"`TIMIT_DATA_DIR` in 'timit_loader.py' to TIMIT's 'data' directory."
 )
