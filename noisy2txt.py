@@ -243,8 +243,8 @@ if __name__ == '__main__':
     from parameters import get_run_parameters
     from timit_loader import TIMIT_DATA_DIR, NO_TIMIT_DATA_ERROR_MESSAGE
 
-    assert (os.path.exists(os.path.join(TIMIT_DATA_DIR, "TRAIN")),
-            NO_TIMIT_DATA_ERROR_MESSAGE)
+    if not os.path.exists(os.path.join(TIMIT_DATA_DIR, "TRAIN")):
+        raise FileNotFoundError(NO_TIMIT_DATA_ERROR_MESSAGE)
 
     custom_static_params = {
         'run_type': 'noisy2txt',
