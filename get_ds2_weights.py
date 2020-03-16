@@ -1,3 +1,6 @@
+"""This script is contains modified code from the MIT licenced
+`automatic_speech_recognition` python module."""
+
 import automatic_speech_recognition as asr
 import tensorflow as tf
 import os
