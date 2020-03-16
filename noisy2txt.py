@@ -100,6 +100,7 @@ def prepare_data(args):
 
 def main(args):
     os.makedirs(args.results_dir, exist_ok=True)
+    os.makedirs(args.log_dir, exist_ok=True)
 
     ds_train, ds_val, ds_test = prepare_data(args)
 
@@ -107,7 +108,8 @@ def main(args):
     denoiser_net = get_flat_denoiser()
     deep_speech_v2 = asr.model.deepspeech2.get_deepspeech2(
         input_dim=160, output_dim=29, is_mixed_precision=False)
-    deep_speech_v2.load_weights(fpath('data', 'ds2_weights.h5'))
+    # these pretrained weights come from `automatic-speech-recognition` module
+    deep_speech_v2.load_weights('ds2_weights.h5')
     # pretrained_pipeline = asr.load('deepspeech2', lang='en')
     # deep_speech_v2 = pretrained_pipeline._model
     for layer in deep_speech_v2.layers:
@@ -248,8 +250,10 @@ if __name__ == '__main__':
         'batch_size': 1,
         'mae_weight': 1.,
         'ctc_weight': 1.,
-        'results_dir_root': os.path.expanduser('~/244-project-results'),
-        'log_dir_root': os.path.expanduser('~/244-project-logs')
+        'results_dir_root': 'results',
+        'log_dir_root': 'logs',
+        # 'results_dir_root': os.path.expanduser('~/244-project-results'),
+        # 'log_dir_root': os.path.expanduser('~/244-project-logs')
     }
 
     custom_dynamic_params = {}
