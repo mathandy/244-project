@@ -24,21 +24,22 @@ _DEFAULT_CONV_PARAMS = {
 def get_flat_denoiser(params=_DEFAULT_CONV_PARAMS):
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(512, 2, dilation_rate=1, name='den_conv1a', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=2, name='den_conv1b', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=4, name='den_conv1c', **params),
-        tfkl.BatchNormalization(name='den_bn1'),
-        tfkl.Conv1D(512, 2, dilation_rate=8, name='den_conv2a', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=16, name='den_conv2b', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=32, name='den_conv2c', **params),
-        tfkl.BatchNormalization(name='den_bn2'),
-        tfkl.Conv1D(512, 2, dilation_rate=64, name='den_conv3a', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=128, name='den_conv3a', **params),
-        tfkl.Conv1D(512, 2, dilation_rate=256, name='den_conv3b', **params),
-        tfkl.BatchNormalization(name='den_bn3'),
-        tfkl.Conv1D(512, 2, dilation_rate=1, name='den_conv3b', **params),
-        tfkl.Conv1D(1, 2, dilation_rate=1, name='den_conv3b', **params),
-        tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1, name='den_fin_sq'))
+        tfkl.Conv1D(512, 25, dilation_rate=1, name='den_conv1a', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=2, name='den_conv1b', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=4, name='den_conv1c', **params),
+        # tfkl.BatchNormalization(name='den_bn1'),
+        tfkl.Conv1D(512, 25, dilation_rate=8, name='den_conv2a', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=16, name='den_conv2b', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=32, name='den_conv2c', **params),
+        # tfkl.BatchNormalization(name='den_bn2'),
+        tfkl.Conv1D(512, 25, dilation_rate=64, name='den_conv3a', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=128, name='den_conv3a', **params),
+        tfkl.Conv1D(512, 25, dilation_rate=256, name='den_conv3b', **params),
+        # tfkl.BatchNormalization(name='den_bn3'),
+        tfkl.Conv1D(512, 25, dilation_rate=1, name='den_conv3b', **params),
+        tfkl.Conv1D(1, 25, dilation_rate=1, name='den_conv3b', **params),
+        tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1, name='den_fin_sq')),
+        # tfkl.Lambda(lambda x: x / tf.reduce_max(x, axis=1, keepdims=True))
     ])
     return model
 
@@ -122,7 +123,7 @@ def main(args):
     )
 
     loss_fcn = get_loss_fcn()
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate=args.learning_rate)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
     train_loss_ctc = tf.keras.metrics.Mean('train_loss_ctc', dtype=tf.float32)
     train_loss_mse = tf.keras.metrics.Mean('train_loss_mse', dtype=tf.float32)
     val_loss_ctc = tf.keras.metrics.Mean('val_loss_ctc', dtype=tf.float32)
@@ -253,8 +254,8 @@ if __name__ == '__main__':
         'input_length': 32000,
         'noisiness': 0.5,
         'epochs': 100,
-        'batch_size': 1,
-        'mse_weight': 1.,
+        'batch_size': 2,
+        'mse_weight': 0.,
         'ctc_weight': 1.,
         'results_dir_root': 'results',
         'log_dir_root': 'logs',
