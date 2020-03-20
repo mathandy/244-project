@@ -16,18 +16,29 @@ tfkl = tf.keras.layers
 _DEFAULT_CONV_PARAMS = {
     'activation': 'relu',
     'padding': 'same',
-    'kernel_initializer': 'he_normal'
+    'kernel_initializer': 'he_normal',
+    # 'strides': 4
 }
 
 
 def get_flat_denoiser(params=_DEFAULT_CONV_PARAMS):
     model = tf.keras.models.Sequential(layers=[
         tfkl.Lambda(lambda inputs: tf.expand_dims(inputs, -1)),
-        tfkl.Conv1D(64, 13, name='den_conv0', **params),
-        tfkl.Conv1D(64, 13, name='den_conv1', **params),
-        tfkl.Conv1D(64, 13, name='den_conv2', **params),
-        tfkl.Conv1D(1, 13, name='den_conv3', **params),
-        tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1))
+        tfkl.Conv1D(512, 2, dilation_rate=1, name='den_conv1a', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=2, name='den_conv1b', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=4, name='den_conv1c', **params),
+        tfkl.BatchNormalization(name='den_bn1'),
+        tfkl.Conv1D(512, 2, dilation_rate=8, name='den_conv2a', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=16, name='den_conv2b', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=32, name='den_conv2c', **params),
+        tfkl.BatchNormalization(name='den_bn2'),
+        tfkl.Conv1D(512, 2, dilation_rate=64, name='den_conv3a', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=128, name='den_conv3a', **params),
+        tfkl.Conv1D(512, 2, dilation_rate=256, name='den_conv3b', **params),
+        tfkl.BatchNormalization(name='den_bn3'),
+        tfkl.Conv1D(512, 2, dilation_rate=1, name='den_conv3b', **params),
+        tfkl.Conv1D(1, 2, dilation_rate=1, name='den_conv3b', **params),
+        tfkl.Lambda(lambda outputs: tf.squeeze(outputs, -1, name='den_fin_sq'))
     ])
     return model
 
@@ -45,19 +56,6 @@ def predict(self, batch_audio: List[np.ndarray], **kwargs) -> List[str]:
     decoded_labels = self._decoder(batch_logits)
     predictions = self._alphabet.get_batch_transcripts(decoded_labels)
     return predictions
-
-
-# def fit(our_model, asr_pipeline, dataset, dev_dataset, **kwargs):
-#
-#     dataset = asr_pipeline.wrap_preprocess(dataset)
-#     dev_dataset = asr_pipeline.wrap_preprocess(dev_dataset)
-#     if not our_model.optimizer:  # a loss function and an optimizer
-#         y = tfkl.Input(name='y', shape=[None], dtype='int32')
-#         loss = asr_pipeline.get_loss()
-#         our_model.compile(asr_pipeline._optimizer, loss, target_tensors=[y])
-#     tmp = our_model.fit(dataset, validation_data=dev_dataset, **kwargs)
-#     print(tmp)
-#     return our_model
 
 
 def get_loss_fcn():
@@ -126,13 +124,13 @@ def main(args):
     loss_fcn = get_loss_fcn()
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=args.learning_rate)
     train_loss_ctc = tf.keras.metrics.Mean('train_loss_ctc', dtype=tf.float32)
-    train_loss_mae = tf.keras.metrics.Mean('train_loss_mae', dtype=tf.float32)
+    train_loss_mse = tf.keras.metrics.Mean('train_loss_mse', dtype=tf.float32)
     val_loss_ctc = tf.keras.metrics.Mean('val_loss_ctc', dtype=tf.float32)
-    val_loss_mae = tf.keras.metrics.Mean('val_loss_mae', dtype=tf.float32)
+    val_loss_mse = tf.keras.metrics.Mean('val_loss_mse', dtype=tf.float32)
     test_loss_ctc = tf.keras.metrics.Mean('test_loss_ctc', dtype=tf.float32)
-    test_loss_mae = tf.keras.metrics.Mean('test_loss_mae', dtype=tf.float32)
+    test_loss_mse = tf.keras.metrics.Mean('test_loss_mse', dtype=tf.float32)
     ctc_weight = tf.constant(args.ctc_weight, dtype=tf.float32)
-    mae_weight = tf.constant(args.mae_weight, dtype=tf.float32)
+    mse_weight = tf.constant(args.mse_weight, dtype=tf.float32)
 
     # for tensorboard
     train_summary_writer = tf.summary.create_file_writer(
@@ -151,27 +149,27 @@ def main(args):
                 features = features_extractor(denoised_audio_batch)
                 batch_logits = deep_speech_v2(features)
                 loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
-                loss_mae = tf.keras.losses.mae(clean_audio_batch,
+                loss_mse = tf.keras.losses.mse(clean_audio_batch,
                                                denoised_audio_batch)
-                loss = ctc_weight*loss_ctc + mae_weight*loss_mae
+                loss = ctc_weight*loss_ctc + mse_weight*loss_mse
 
             grads = tape.gradient(loss, denoiser_net.trainable_weights)
             optimizer.apply_gradients(zip(grads, denoiser_net.trainable_weights))
 
             train_loss_ctc(loss_ctc)
-            train_loss_mae(loss_mae)
+            train_loss_mse(loss_mse)
 
             with train_summary_writer.as_default():
                 tf.summary.scalar(
                     'train_loss_ctc', train_loss_ctc.result(), step=epoch)
                 tf.summary.scalar(
-                    'train_loss_mae', train_loss_mae.result(), step=epoch)
+                    'train_loss_mse', train_loss_mse.result(), step=epoch)
 
             if step % 100 == 0:
                 print('step %s: (train) ctc loss = %s'
                       '' % (step, train_loss_ctc.result()))
-                print('step %s: (train) mae loss = %s'
-                      '' % (step, train_loss_mae.result()))
+                print('step %s: (train) mse loss = %s'
+                      '' % (step, train_loss_mse.result()))
 
                 # write samples to disk
                 prefix = f'epoch-{epoch}_step-{step}_'
@@ -191,24 +189,24 @@ def main(args):
             features = features_extractor(denoised_audio_batch)
             batch_logits = deep_speech_v2(features)
             loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
-            loss_mae = tf.keras.losses.mae(clean_audio_batch,
+            loss_mse = tf.keras.losses.mse(clean_audio_batch,
                                            denoised_audio_batch)
-            # loss = ctc_weight * loss_ctc + mae_weight * loss_mae
+            # loss = ctc_weight * loss_ctc + mse_weight * loss_mse
 
             val_loss_ctc(loss_ctc)
-            val_loss_mae(loss_mae)
+            val_loss_mse(loss_mse)
             with val_summary_writer.as_default():
                 tf.summary.scalar('val_loss_ctc', val_loss_ctc.result(), step=epoch)
-                tf.summary.scalar('val_loss_mae', val_loss_mae.result(), step=epoch)
+                tf.summary.scalar('val_loss_mse', val_loss_mse.result(), step=epoch)
 
         print(f'epoch {epoch}: val ctc loss:', val_loss_ctc.result())
-        print(f'epoch {epoch}: val mae loss:', val_loss_mae.result())
+        print(f'epoch {epoch}: val mse loss:', val_loss_mse.result())
 
         # Reset metrics every epoch
         val_loss_ctc.reset_states()
-        val_loss_mae.reset_states()
+        val_loss_mse.reset_states()
         train_loss_ctc.reset_states()
-        train_loss_mae.reset_states()
+        train_loss_mse.reset_states()
 
     # test
     counter = 0
@@ -218,12 +216,12 @@ def main(args):
         features = features_extractor(denoised_audio_batch)
         batch_logits = deep_speech_v2(features)
         loss_ctc = loss_fcn(enc_transcript_batch, batch_logits)
-        loss_mae = tf.keras.losses.mae(clean_audio_batch,
+        loss_mse = tf.keras.losses.mse(clean_audio_batch,
                                        denoised_audio_batch)
-        # loss = ctc_weight * loss_ctc + mae_weight * loss_mae
+        # loss = ctc_weight * loss_ctc + mse_weight * loss_mse
 
         test_loss_ctc(loss_ctc)
-        test_loss_mae(loss_mae)
+        test_loss_mse(loss_mse)
 
         # write samples to disk
         prefix = f'test_'
@@ -236,7 +234,7 @@ def main(args):
             renormalize_quantize_and_save(denoised_sample, fp)
             counter += 1
     print("Test CTC Loss:", test_loss_ctc.result())
-    print("Test MAE Loss:", test_loss_mae.result())
+    print("Test mse Loss:", test_loss_mse.result())
 
 
 if __name__ == '__main__':
@@ -256,7 +254,7 @@ if __name__ == '__main__':
         'noisiness': 0.5,
         'epochs': 100,
         'batch_size': 1,
-        'mae_weight': 1.,
+        'mse_weight': 1.,
         'ctc_weight': 1.,
         'results_dir_root': 'results',
         'log_dir_root': 'logs',
